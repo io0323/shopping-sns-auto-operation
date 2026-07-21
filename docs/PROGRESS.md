@@ -33,7 +33,17 @@
   - `import_errors`テーブルのモデルクラス名は`ImportErrorRecord`(Python組み込み`ImportError`との衝突を避けるため)
   - `llm_usage.job_id`は設計書の型表記(UUID、NULLABLE指定なし)に従いNOT NULLとした
   - Rakuten APIエンドポイントは現行バージョン(Search: 20260701 / Ranking: 20220601)を採用。将来的にバージョンが変わった場合は`app/clients/rakuten_api.py`の定数を更新すること
-- 未着手: Phase 1-2(Research/Selection Agent)以降
+- Phase 1-2 実施内容(2026-07-21):
+  - `agents/research.py`: `config/strategy.yaml`のジャンルリストを読み、ジャンル別ランキング上位30件を取得。`item_code`でproductsをupsert、`(product_id, snapshot_date)`でproduct_metricsをupsert(同日再実行は上書きで冪等)。ジャンル単位のAPI失敗はそのジャンルをスキップして継続(基本設計5章のエラーハンドリング方針に準拠)
+  - `agents/selection.py`: 詳細設計3章のスコア計算式(`rank_trend/review_growth/rating/seasonality/price_fit/competition`)を実装。重みは`config/scoring.yaml`から読み込み、絶対値合計が1.0であることをPydanticバリデータで検証。除外条件(`excluded=true` / 直近30日投稿済み / 直近7日メトリクス2日未満)を適用し、スコア上位N件(既定10、`strategy.yaml`の`daily_candidate_count`)を`score_breakdown`付きでcandidatesに登録
+  - `config/strategy.yaml` / `config/scoring.yaml` / `config/seasonality.yaml` のサンプルを作成
+  - テスト: スコア各要素の正規化・クリッピング、重み合計バリデーション、季節性フォールバック、除外条件、Top-N選定を固定データで検証(`tests/test_selection.py`)。research の upsert冪等性・ジャンル失敗時のスキップ継続を検証(`tests/test_research.py`)
+- Phase 1-2 設計書に無い判断:
+  - `config/strategy.yaml`の`genres`は「ID一覧」ではなく`{id, name}`のペア一覧とした。楽天Ranking/Search APIのレスポンスにはジャンル名(genreName)が含まれず、products.genre_name(NOT NULL)を埋める情報源が他に無いため。実運用では楽天ジャンル検索API(GenreSearch)で確認した名称に置き換える運用とする
+  - price_fit(価格帯適合)の台形メンバーシップ関数は、詳細設計に明記のない外側の減衰境界(`soft_min`/`soft_max`)を`config/strategy.yaml`の`price_band`に追加して定義した(既定 500円/15,000円)
+  - rank_trendは、比較対象の順位(7日前 or 当日)のいずれかが圏外(NULL)の場合は算出不能として0(中立)を返す仕様とした
+  - 季節性係数は`config/seasonality.yaml`にジャンル×月の値が無い場合、`default`(既定0.5)にフォールバックする
+- 未着手: Phase 1-3(LLMクライアントとGenerator / Evaluator Agent)以降
 
 ## Phase 2: レビューUI + Export + CSVインポート + 分析ダッシュボード
 
