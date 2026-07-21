@@ -18,7 +18,7 @@ _ERROR_CODES = {
 }
 
 
-@app.exception_handler(StarletteHTTPException)
+`@app.exception_handler`(StarletteHTTPException)
 async def http_exception_handler(
     request: Request, exc: StarletteHTTPException
 ) -> JSONResponse:
@@ -26,4 +26,14 @@ async def http_exception_handler(
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": code, "message": str(exc.detail)}},
+    )
+
+
+`@app.exception_handler`(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"error": {"code": "VALIDATION_ERROR", "message": "Validation error"}},
     )
