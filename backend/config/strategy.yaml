@@ -1,0 +1,23 @@
+# 投稿戦略設定(Phase 1では人間が記述。Phase 3でPlanner Agentが提案)
+#
+# genres: 監視対象ジャンル(楽天市場ジャンルID)。id/nameは例。
+#   実際の運用では 楽天ジャンル検索API(GenreSearch) で確認したIDに置き換えること。
+genres:
+  - id: "100283"
+    name: "スイーツ・お菓子"
+  - id: "100371"
+    name: "レディースファッション"
+  - id: "551177"
+    name: "生活雑貨"
+
+# 1日あたりの投稿候補数
+daily_candidate_count: 10
+
+# 価格帯適合(price_fit)スコアの対象価格帯。
+# min〜maxが最大評価(1.0)、soft_min〜min および max〜soft_maxは線形に減衰、
+# soft_min以下・soft_max以上は0。
+price_band:
+  min: 1000
+  max: 10000
+  soft_min: 500
+  soft_max: 15000

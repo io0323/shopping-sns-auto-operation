@@ -1,0 +1,11 @@
+# Selection Agent のスコア重み(詳細設計3章)。
+# score = rank_trend*w1 + review_growth*w2 + rating*w3
+#       + seasonality*w4 + price_fit*w5 - competition*w6
+# 各重みの絶対値の合計は必ず1.0にすること(起動時にバリデーションされる)。
+weights:
+  rank_trend: 0.25
+  review_growth: 0.20
+  rating: 0.15
+  seasonality: 0.15
+  price_fit: 0.15
+  competition: 0.10
