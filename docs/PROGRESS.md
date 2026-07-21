@@ -20,7 +20,20 @@
 
 ## Phase 1: 基盤 + Research/Selection/Generator/Evaluator + 日次パイプライン
 
-- 状態: 未着手
+- 状態: 進行中(1-1完了、2026-07-21)
+- Phase 1-1 実施内容:
+  - 詳細設計1章の全9テーブル(products, product_metrics, candidates, contents, results, jobs, llm_usage, prompt_versions, import_errors)をSQLAlchemy 2.0 Mappedスタイルで実装(`app/models/`)。UUID主キーは`Uuid(as_uuid=True)`、JSON列はPostgreSQL移行を見据え`JSON`型を使用
+  - Alembicを導入し、`alembic/env.py`は`app.core.config.Settings`経由でDATABASE_URLを取得(ハードコード禁止ルールに準拠)。初期マイグレーション(`init tables`)を作成し、upgrade/downgrade双方を確認
+  - `app/core/db.py`: engine/sessionmakerのシングルトン管理を追加(Alembicおよび今後のagentsから利用)
+  - `clients/rakuten_api.py`: IchibaItem Ranking(20220601)/Search(20260701) APIクライアント。エンドポイント・レスポンス構造(`{"items": [{"item": {...}}]}`)は楽天ウェブサービス公式ドキュメントを直接確認して実装
+    - リクエスト間1.1秒ウェイト、429/5xxは指数バックオフ(1s→4s→16s、3回)でリトライ、それ以外のエラーは即例外
+    - レスポンスをPydanticモデル(`RakutenItem`)にパース。genreIdは`coerce_numbers_to_str`でDBのVARCHAR列と型を揃えた
+  - テスト: レート制限ウェイト・バックオフ・パースをモックで検証(`tests/test_rakuten_api.py`)、SQLAlchemyモデルの永続化・リレーションを検証(`tests/test_models.py`)
+- 設計書に無い判断:
+  - `import_errors`テーブルのモデルクラス名は`ImportErrorRecord`(Python組み込み`ImportError`との衝突を避けるため)
+  - `llm_usage.job_id`は設計書の型表記(UUID、NULLABLE指定なし)に従いNOT NULLとした
+  - Rakuten APIエンドポイントは現行バージョン(Search: 20260701 / Ranking: 20220601)を採用。将来的にバージョンが変わった場合は`app/clients/rakuten_api.py`の定数を更新すること
+- 未着手: Phase 1-2(Research/Selection Agent)以降
 
 ## Phase 2: レビューUI + Export + CSVインポート + 分析ダッシュボード
 
