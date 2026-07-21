@@ -60,7 +60,9 @@ def rule_check(content: GeneratedContent, ng_words: NgWordsConfig) -> list[str]:
     if "#ad" not in content.x_post:
         violations.append("x_post に #ad が含まれていません")
 
-    haystack = "\n".join([content.title, content.description, content.x_post, content.cta])
+    haystack = "\n".join(
+        [content.title, content.description, content.x_post, content.cta, *content.hashtags]
+    )
     for pattern in ng_words.patterns:
         if re.search(pattern, haystack):
             violations.append(f"禁止表現に抵触しています: {pattern}")
@@ -134,8 +136,6 @@ def run_generate_and_evaluate(
         last_eval = run_evaluator(session, llm_client, job_id, generated, recent_posts)
         if last_eval.total >= PASS_THRESHOLD:
             break
-        improvement_hint = last_eval.improvement
-
     assert generated is not None
     passed = last_eval is not None and last_eval.total >= PASS_THRESHOLD
 
@@ -155,7 +155,13 @@ def run_generate_and_evaluate(
         content.quality_score = float(last_eval.total)
         content.quality_breakdown = last_eval.scores.model_dump()
         content.eval_comment = last_eval.improvement
+    elif improvement_hint is not None:
+        content.eval_comment = improvement_hint
 
     session.add(content)
+    session.commit()
+    return content
+    session.commit()
+    return content
     session.commit()
     return content

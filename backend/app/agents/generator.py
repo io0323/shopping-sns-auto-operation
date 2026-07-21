@@ -107,4 +107,7 @@ def generate_content(
         prompt=prompt,
     )
     generated = parse_generated_content(result.text)
+    violations = validate_length_constraints(generated)
+    if violations:
+        raise ValueError("生成コンテンツが制約に違反しています: " + "; ".join(violations))
     return generated, prompt_version.version
