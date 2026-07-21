@@ -136,6 +136,8 @@ def run_generate_and_evaluate(
         last_eval = run_evaluator(session, llm_client, job_id, generated, recent_posts)
         if last_eval.total >= PASS_THRESHOLD:
             break
+        improvement_hint = last_eval.improvement
+
     assert generated is not None
     passed = last_eval is not None and last_eval.total >= PASS_THRESHOLD
 
@@ -159,9 +161,5 @@ def run_generate_and_evaluate(
         content.eval_comment = improvement_hint
 
     session.add(content)
-    session.commit()
-    return content
-    session.commit()
-    return content
     session.commit()
     return content
