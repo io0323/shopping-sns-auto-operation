@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     monthly_llm_budget_jpy: int = 3000
     database_url: str = "sqlite:///./data.db"
     model_generator: str = "claude-sonnet-5"
-    model_evaluator: str = "claude-haiku-4-5-20251001"
+    model_evaluator: str = "claude-haiku-4-5"
+    usd_jpy_rate: float = 150.0
 
 
 @lru_cache
