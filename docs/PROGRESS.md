@@ -43,7 +43,20 @@
   - price_fit(価格帯適合)の台形メンバーシップ関数は、詳細設計に明記のない外側の減衰境界(`soft_min`/`soft_max`)を`config/strategy.yaml`の`price_band`に追加して定義した(既定 500円/15,000円)
   - rank_trendは、比較対象の順位(7日前 or 当日)のいずれかが圏外(NULL)の場合は算出不能として0(中立)を返す仕様とした
   - 季節性係数は`config/seasonality.yaml`にジャンル×月の値が無い場合、`default`(既定0.5)にフォールバックする
-- 未着手: Phase 1-3(LLMクライアントとGenerator / Evaluator Agent)以降
+- Phase 1-3 実施内容(2026-07-21):
+  - `clients/llm.py`: Anthropic SDKラッパー(`LlmClient.complete`)。呼出ごとにllm_usageへモデル・トークン数・概算費用(円)を記録。料金は`claude-api`スキルで確認した標準単価($/1Mトークン: sonnet-5 3.00/15.00、haiku-4.5 1.00/5.00)を`USD_JPY_RATE`(既定150円、.env設定可)で円換算
+  - `harness/cost_guard.py`: `check_budget`が当月累計(llm_usage.estimated_cost_jpyの月初からの合計)が`MONTHLY_LLM_BUDGET_JPY`以上なら`BudgetExceededError`を送出
+  - `prompts/generator/gen-v1.txt` / `prompts/evaluator/eval-v1.txt` を詳細設計4章の内容で作成。`scripts/seed_prompts.py`でprompt_versionsに初期投入(`(agent, version)`単位で冪等)
+  - `config/ng_words.yaml`: 詳細設計4.4の禁止表現辞書(断定・誇大/薬機法系/価格系)を正規表現として定義
+  - `agents/generator.py`: `product_json`を埋め込みプロンプトをレンダリング、LLM呼出後にコードフェンス除去込みでJSONパース、文字数制約(title/description/hashtags個数/x_post/cta)をコード側で検証する`validate_length_constraints`を実装
+  - `agents/evaluator.py`: `rule_check`(禁止語・#ad有無・文字数制約)→ LLM評価(5軸100点)→ 詳細設計4.3の再生成ループ(最大3回、ルール違反時はLLM評価を呼ばず即再生成、80点未満は`improvement`を次回`generator`に渡す)→ 3回失敗で`status=needs_review`、成功で`status=evaluated`
+  - テスト: ルールチェック(禁止語/#ad欠落/文字数超過)、再生成ループの回数上限とルール違反時の評価スキップ、コストガード発動をモック・固定データで検証(`tests/test_generator.py`, `tests/test_evaluator.py`, `tests/test_llm_client.py`, `tests/test_cost_guard.py`, `tests/test_seed_prompts.py`)
+- Phase 1-3 設計書に無い判断:
+  - LLMコストのUSD→JPY換算レートは設計書に定義が無いため、`USD_JPY_RATE`(既定150、.envで上書き可)を新設
+  - モデル料金は変動するプロモーション価格ではなく恒久的な標準単価を採用(`clients/llm.py`のコメントに出典日時を明記)。`MODEL_EVALUATOR`の既定値をpricing表のキーと一致させるため`claude-haiku-4-5`(日付なしエイリアス)に統一
+  - Content.regen_countは「何回目の試行で確定したか」(0始まり)を記録する仕様とした
+  - cost_guard.check_budgetの呼び出し箇所(パイプライン停止の実配線)はharness/pipeline.py実装時(Phase1-4)に行う。本フェーズでは関数として提供のみ
+- 未着手: Phase 1-4(Harness Engineと日次パイプライン)以降
 
 ## Phase 2: レビューUI + Export + CSVインポート + 分析ダッシュボード
 
