@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     model_generator: str = "claude-sonnet-5"
     model_evaluator: str = "claude-haiku-4-5"
     usd_jpy_rate: float = 150.0
+    slack_webhook_url: str = ""
 
 
 @lru_cache

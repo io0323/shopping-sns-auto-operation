@@ -1,16 +1,33 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.health import router as health_router
+from app.api.pipelines import router as pipelines_router
 from app.core.logging import setup_logging
+from app.harness.pipeline import create_scheduler
 
 setup_logging()
 
-app = FastAPI(title="Shopping SNS Auto Operation")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    scheduler = create_scheduler()
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="Shopping SNS Auto Operation", lifespan=lifespan)
 
 app.include_router(health_router, prefix="/api/v1")
+app.include_router(pipelines_router, prefix="/api/v1")
 
 _ERROR_CODES = {
     404: "NOT_FOUND",

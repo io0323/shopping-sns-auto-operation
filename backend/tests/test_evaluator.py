@@ -94,6 +94,7 @@ class FakeLlmClient:
         self._evaluator_responses = iter(evaluator_responses)
         self.generator_calls = 0
         self.evaluator_calls = 0
+        self.generator_prompts: list[str] = []
 
     def complete(
         self,
@@ -106,6 +107,7 @@ class FakeLlmClient:
     ) -> LlmResult:
         if agent == "generator":
             self.generator_calls += 1
+            self.generator_prompts.append(prompt)
             text = next(self._generator_responses)
         else:
             self.evaluator_calls += 1
@@ -178,6 +180,25 @@ def test_run_generate_and_evaluate_needs_review_after_max_attempts() -> None:
     assert content.regen_count == 2
     assert llm_client.generator_calls == 3
     assert llm_client.evaluator_calls == 3
+
+
+def test_run_generate_and_evaluate_feeds_eval_improvement_into_next_prompt() -> None:
+    session = _make_session()
+    _seed_prompts(session)
+    product, candidate = _add_product_and_candidate(session)
+
+    llm_client = FakeLlmClient(
+        generator_responses=[_content_json(), _content_json()],
+        evaluator_responses=[_eval_json(50, "もっと具体的に描写してください"), _eval_json(90)],
+    )
+
+    content = run_generate_and_evaluate(session, llm_client, uuid.uuid4(), product, candidate)
+
+    assert content.status == "evaluated"
+    assert llm_client.generator_calls == 2
+    # 1回目のLLM評価で受け取ったimprovementが2回目のgeneratorプロンプトに反映されていること
+    assert "もっと具体的に描写してください" not in llm_client.generator_prompts[0]
+    assert "もっと具体的に描写してください" in llm_client.generator_prompts[1]
 
 
 def test_run_generate_and_evaluate_regenerates_on_rule_violation_without_evaluating() -> None:
