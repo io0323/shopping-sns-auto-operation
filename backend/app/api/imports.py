@@ -7,13 +7,19 @@ from app.schemas.affiliate_import import ImportSummary
 
 router = APIRouter()
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
 
 @router.post("/import/affiliate-csv")
 async def import_affiliate_csv_endpoint(
     file: UploadFile = File(...),
     session: Session = Depends(get_db),
 ) -> ImportSummary:
-    raw = await file.read()
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413, detail="アップロードファイルが大きすぎます(上限10MB)"
+        )
     try:
         return import_affiliate_csv(session, raw)
     except UnicodeDecodeError as exc:

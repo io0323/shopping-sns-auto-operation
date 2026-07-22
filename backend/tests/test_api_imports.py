@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.imports import MAX_UPLOAD_BYTES
 from tests.conftest import make_product
 
 CSV_HEADER = "itemCode,商品URL,集計期間(開始),集計期間(終了),クリック数,成果件数,成果報酬額"
@@ -41,3 +42,11 @@ def test_import_affiliate_csv_endpoint_rejects_invalid_encoding(api_client: Test
     response = api_client.post("/api/v1/import/affiliate-csv", files=files)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_import_affiliate_csv_endpoint_rejects_oversized_file(api_client: TestClient) -> None:
+    oversized = b"a" * (MAX_UPLOAD_BYTES + 1)
+    files = {"file": ("report.csv", oversized, "text/csv")}
+    response = api_client.post("/api/v1/import/affiliate-csv", files=files)
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"

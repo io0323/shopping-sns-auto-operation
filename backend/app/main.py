@@ -58,6 +58,7 @@ app.include_router(costs_router, prefix="/api/v1")
 _ERROR_CODES = {
     404: "NOT_FOUND",
     409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
     422: "VALIDATION_ERROR",
 }
 

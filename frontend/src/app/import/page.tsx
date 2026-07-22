@@ -18,6 +18,7 @@ export default function ImportPage() {
 
     setUploading(true);
     setError(null);
+    setSummary(null);
     try {
       const result = await uploadAffiliateCsv(file);
       setSummary(result);

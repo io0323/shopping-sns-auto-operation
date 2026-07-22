@@ -54,6 +54,19 @@ def import_affiliate_csv(session: Session, raw: bytes) -> ImportSummary:
     text = decode_shift_jis(raw)
     reader = csv.DictReader(io.StringIO(text))
 
+    missing_columns = [c for c in REQUIRED_COLUMNS if c not in (reader.fieldnames or [])]
+    if missing_columns:
+        reason = f"必須カラムがありません: {', '.join(missing_columns)}"
+        header_line = text.splitlines()[0] if text else ""
+        session.add(ImportErrorRecord(raw_line=header_line, reason=reason))
+        session.commit()
+        return ImportSummary(
+            imported=0,
+            updated=0,
+            error_count=1,
+            errors=[ImportErrorOut(raw_line=header_line, reason=reason)],
+        )
+
     imported = 0
     updated = 0
     errors: list[ImportErrorOut] = []

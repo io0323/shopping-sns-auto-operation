@@ -138,6 +138,23 @@ def test_import_affiliate_csv_records_malformed_row_as_error_and_continues() -> 
     assert result.report_date_from == date(2026, 7, 8)
 
 
+def test_import_affiliate_csv_reports_error_for_missing_required_headers() -> None:
+    session = _make_session()
+    make_product(session, item_code="shop1:0001")
+
+    csv_text = "itemCode,商品URL,集計期間(開始),集計期間(終了),クリック数,成果件数"
+
+    summary = import_affiliate_csv(session, _to_shift_jis(csv_text))
+
+    assert summary.imported == 0
+    assert summary.updated == 0
+    assert summary.error_count == 1
+    assert "成果報酬額" in summary.errors[0].reason
+
+    errors = session.execute(select(ImportErrorRecord)).scalars().all()
+    assert len(errors) == 1
+
+
 def test_import_affiliate_csv_decodes_shift_jis_japanese_values() -> None:
     session = _make_session()
     make_product(session, item_code="shop1:0001", name="日本語の商品名テスト")

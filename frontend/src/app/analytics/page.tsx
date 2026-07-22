@@ -12,6 +12,7 @@ export default function AnalyticsPage() {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -20,6 +21,7 @@ export default function AnalyticsPage() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
+    setSummary(null);
     fetchAnalyticsSummary(dateFrom || undefined, dateTo || undefined)
       .then((res) => {
         if (mountedRef.current) setSummary(res);
