@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, type Candidate, fetchCandidates } from "@/lib/api";
+import { todayIso } from "@/lib/date";
 
 const SCORE_LABELS: Record<string, string> = {
   rank_trend: "順位変動",
@@ -11,14 +12,6 @@ const SCORE_LABELS: Record<string, string> = {
   price_fit: "価格帯適合",
   competition: "競合度",
 };
-
-function todayIso(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function ScoreCell({ candidate }: { candidate: Candidate }) {
   return (

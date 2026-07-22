@@ -7,10 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.analytics import router as analytics_router
 from app.api.candidates import router as candidates_router
 from app.api.contents import router as contents_router
+from app.api.costs import router as costs_router
+from app.api.export import router as export_router
 from app.api.generation import router as generation_router
 from app.api.health import router as health_router
+from app.api.imports import router as imports_router
 from app.api.jobs import router as jobs_router
 from app.api.pipelines import router as pipelines_router
 from app.api.products import router as products_router
@@ -46,6 +50,10 @@ app.include_router(candidates_router, prefix="/api/v1")
 app.include_router(contents_router, prefix="/api/v1")
 app.include_router(generation_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")
+app.include_router(export_router, prefix="/api/v1")
+app.include_router(imports_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(costs_router, prefix="/api/v1")
 
 _ERROR_CODES = {
     404: "NOT_FOUND",

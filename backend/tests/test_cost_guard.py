@@ -5,7 +5,12 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.harness.cost_guard import BudgetExceededError, check_budget, get_month_to_date_cost_jpy
+from app.harness.cost_guard import (
+    BudgetExceededError,
+    check_budget,
+    get_cost_for_month,
+    get_month_to_date_cost_jpy,
+)
 from app.models import Base, Job, LlmUsage
 
 
@@ -41,6 +46,28 @@ def test_get_month_to_date_cost_sums_only_current_month() -> None:
 
     total = get_month_to_date_cost_jpy(session, as_of=date(2026, 7, 21))
     assert total == pytest.approx(800.0)
+
+
+def test_get_cost_for_month_excludes_other_months() -> None:
+    session = _make_session()
+    _add_usage(session, 500.0, datetime(2026, 7, 1))
+    _add_usage(session, 300.0, datetime(2026, 7, 31, 23, 59))
+    _add_usage(session, 999.0, datetime(2026, 6, 30))
+    _add_usage(session, 111.0, datetime(2026, 8, 1))
+    session.commit()
+
+    total = get_cost_for_month(session, 2026, 7)
+    assert total == pytest.approx(800.0)
+
+
+def test_get_cost_for_month_handles_december_year_rollover() -> None:
+    session = _make_session()
+    _add_usage(session, 200.0, datetime(2026, 12, 15))
+    _add_usage(session, 999.0, datetime(2027, 1, 1))
+    session.commit()
+
+    total = get_cost_for_month(session, 2026, 12)
+    assert total == pytest.approx(200.0)
 
 
 def test_check_budget_raises_when_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:

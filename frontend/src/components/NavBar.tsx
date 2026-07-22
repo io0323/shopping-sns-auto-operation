@@ -1,9 +1,12 @@
 import Link from "next/link";
 
 const LINKS = [
+  { href: "/dashboard", label: "ダッシュボード" },
   { href: "/candidates", label: "候補一覧" },
   { href: "/review", label: "レビュー" },
   { href: "/queue", label: "投稿キュー" },
+  { href: "/import", label: "実績取込" },
+  { href: "/analytics", label: "分析" },
 ];
 
 export function NavBar() {

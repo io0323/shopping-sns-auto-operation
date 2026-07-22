@@ -63,6 +63,65 @@ export interface ContentUpdatePayload {
   scheduled_at?: string | null;
 }
 
+export interface ExportItem {
+  content_id: string;
+  product_id: string;
+  product_name: string;
+  item_url: string;
+  room_text: string;
+  x_text: string;
+  has_ad_disclosure: boolean;
+  checklist: string[];
+  scheduled_at: string | null;
+}
+
+export interface ExportQueueResponse {
+  items: ExportItem[];
+}
+
+export interface ImportErrorRow {
+  raw_line: string;
+  reason: string;
+}
+
+export interface ImportSummary {
+  imported: number;
+  updated: number;
+  error_count: number;
+  errors: ImportErrorRow[];
+}
+
+export interface GenreKpi {
+  genre_id: string;
+  genre_name: string;
+  clicks: number;
+  conversions: number;
+  revenue: number;
+}
+
+export interface AnalyticsSummary {
+  date_from: string | null;
+  date_to: string | null;
+  clicks: number;
+  conversions: number;
+  revenue: number;
+  by_genre: GenreKpi[];
+}
+
+export interface AgentCost {
+  agent: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_jpy: number;
+}
+
+export interface CostSummary {
+  month: string;
+  total_cost_jpy: number;
+  budget_jpy: number;
+  by_agent: AgentCost[];
+}
+
 interface ApiErrorBody {
   error: { code: string; message: string };
 }
@@ -80,10 +139,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init?.headers,
     },
   });
@@ -144,4 +204,33 @@ export function rejectContent(id: string): Promise<Content> {
 
 export function markContentPosted(id: string): Promise<Content> {
   return request<Content>(`/api/v1/contents/${id}/mark-posted`, { method: "POST" });
+}
+
+export function fetchExportQueue(): Promise<ExportQueueResponse> {
+  return request<ExportQueueResponse>("/api/v1/export/queue");
+}
+
+export function uploadAffiliateCsv(file: File): Promise<ImportSummary> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<ImportSummary>("/api/v1/import/affiliate-csv", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function fetchAnalyticsSummary(
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<AnalyticsSummary> {
+  const params = new URLSearchParams();
+  if (dateFrom) params.append("date_from", dateFrom);
+  if (dateTo) params.append("date_to", dateTo);
+  const query = params.toString();
+  return request<AnalyticsSummary>(`/api/v1/analytics/summary${query ? `?${query}` : ""}`);
+}
+
+export function fetchCosts(month: string): Promise<CostSummary> {
+  const params = new URLSearchParams({ month });
+  return request<CostSummary>(`/api/v1/costs?${params.toString()}`);
 }

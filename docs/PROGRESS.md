@@ -73,7 +73,7 @@
 
 ## Phase 2: レビューUI + Export + CSVインポート + 分析ダッシュボード
 
-- 状態: 進行中(2-1完了、2026-07-22)
+- 状態: 進行中(2-2完了、2026-07-22)
 - Phase 2-1 実施内容:
   - バックエンド(詳細設計2章、learning-report・POST /import/affiliate-csv・GET /export/queue・POST /prompts/{agent}/activateを除く。理由は下記「設計書に無い判断」参照):
     - `GET /products`(genre_id/min_score/excluded フィルタ、ページング)、`GET /products/{id}/metrics`
@@ -97,6 +97,19 @@
   - 操作ログは詳細設計に表形式の記載はあるが専用テーブルが無いため、`operation_logs`テーブルを新設(Alembicマイグレーション追加)
   - PATCH /contents/{id}のedited_by_humanは、タイトル/説明文/ハッシュタグ/X投稿文/CTAのいずれかを変更した場合のみtrueにする(scheduled_atのみの変更では人間による本文修正とみなさない)
   - POST /generateの`job.pipeline`は詳細設計1章に例示されている`manual_generate`を採用
+- Phase 2-2 実施内容:
+  - `agents/export.py`: 承認済み(`status=approved`)コンテンツを`scheduled_at`昇順(未設定は末尾)で取得し、ROOM用テキスト(タイトル+説明文+ハッシュタグ結合)・X用テキスト・`#ad`表記有無(`has_ad_disclosure`)・投稿前チェックリスト(URL/画像確認、価格記載なし確認、`#ad`確認)を付与。`GET /export/queue`で返却
+  - `agents/importer.py` + `POST /import/affiliate-csv`: アップロードされたCSVをShift-JIS(cp932)→UTF-8で変換し、`csv.DictReader`でカラムマッピング。`itemCode`列を優先し、空の場合は`商品URL`列でproductsに突合。`(product_id, report_date_from, report_date_to)`が既存results行と一致する場合は上書き(updated計上)、無ければ新規insert(imported計上)。突合不能行・日付/数値の形式不正行は`import_errors`テーブルに保存しつつ処理を継続し、レスポンスで取込件数・上書き件数・エラー件数・エラー行(行内容+理由)を返す
+  - `harness/cost_guard.py`に`get_cost_for_month(year, month)`を追加(既存の`get_month_to_date_cost_jpy`は当月かつ上限なしの累計のため、任意の過去月集計には非対応だった)。`GET /costs?month=YYYY-MM`(`api/costs.py`)でモデル別ではなくagent別のトークン数・コスト内訳と月間予算(`MONTHLY_LLM_BUDGET_JPY`)を返却
+  - `GET /analytics/summary`(`api/analytics.py`): `date_from`/`date_to`(任意、`report_date_from`/`report_date_to`に対する範囲フィルタ)でresultsを集計し、全体のclicks/conversions/revenueとジャンル別内訳(報酬額降順)を返却
+  - フロントエンド: `/import`(CSVアップロード+取込サマリ+エラー行テーブル)、`/analytics`(期間指定+KPIサマリ+ジャンル別テーブル)、`/dashboard`(本日の候補数・要確認数・当月LLMコスト/予算・当月KPI)を追加。`/queue`はPhase2-1で暫定実装していたクライアント側テキスト組み立てを廃止し、`GET /export/queue`(整形済みテキスト・`#ad`欠落警告・チェックリスト表示)に差し替え。`lib/date.ts`に`todayIso`/`currentMonthIso`を共通化(candidates/dashboard間の重複を解消)
+  - テスト: importerはローカルで生成したShift-JIS実CSVサンプル(`itemCode`一致/`商品URL`フォールバック一致/期間重複上書き/突合不能行/日付不正行/日本語値のデコード)を検証(`tests/test_importer.py`, `tests/test_api_imports.py`)。exportの並び順・ROOM整形・`#ad`有無判定(`tests/test_export.py`, `tests/test_api_export.py`)、analyticsの集計・期間フィルタ(`tests/test_api_analytics.py`)、costsの月次集計・年またぎ(12月→1月)・不正な`month`パラメータ(`tests/test_cost_guard.py`, `tests/test_api_costs.py`)を検証
+  - 検証: `uv run pytest`(113 passed)、`uv run ruff check .`、`uv run mypy app`。`python-multipart`をCSVアップロード(multipart/form-data)対応のため追加。フロントエンドは`npm run lint`/`npm run build`に加え、移行済みDBとuvicorn/Next.js devサーバーを実際に起動し、`/export/queue`・`/analytics/summary`・`/costs`・`/import/affiliate-csv`(実CSVサンプルのアップロード)をcurlで、`/dashboard`・`/analytics`・`/import`ページのコンパイル・200応答をNext.js devサーバーで確認(ブラウザでのクリック操作自体は自動化ツールが無いため未実施)
+- Phase 2-2 設計書に無い判断:
+  - 楽天アフィリエイトレポートCSVの正確なカラム名は設計書・要件定義に記載が無いため、`itemCode, 商品URL, 集計期間(開始), 集計期間(終了), クリック数, 成果件数, 成果報酬額`の列名を定義して実装した。実際のレポートCSVのヘッダ名がこれと異なる場合は`agents/importer.py`の列名定数を実物に合わせて更新すること
+  - `results.content_id`(NULLABLE、「投稿と対応付く場合」)は、CSV上に投稿(content)を一意に特定できる情報が無いため常にNULLのまま保存する。将来的にproduct×期間から対応するposted済みcontentを推定する仕様を追加する場合は別途設計する
+  - `GET /costs`のクエリパラメータ`month`はFastAPI/Pydanticの`pattern`検証(`^\d{4}-(0[1-9]|1[0-2])$`)で`YYYY-MM`形式を強制し、不正値は自動的に422(共通エラー仕様)を返す
+  - `GET /analytics/summary`の期間フィルタは`results.report_date_from >= date_from`かつ`report_date_to <= date_to`(レポート期間が指定範囲に完全に収まる行のみ)とした。部分的に重なる行の按分は行っていない
 
 ## Phase 3: Learning Agent + プロンプト版管理 + 改善提案フロー
 

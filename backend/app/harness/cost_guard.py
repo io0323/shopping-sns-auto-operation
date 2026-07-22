@@ -20,6 +20,15 @@ def get_month_to_date_cost_jpy(session: Session, as_of: date | None = None) -> f
     return float(session.execute(stmt).scalar_one())
 
 
+def get_cost_for_month(session: Session, year: int, month: int) -> float:
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+    stmt = select(func.coalesce(func.sum(LlmUsage.estimated_cost_jpy), 0.0)).where(
+        LlmUsage.created_at >= month_start, LlmUsage.created_at < month_end
+    )
+    return float(session.execute(stmt).scalar_one())
+
+
 def check_budget(session: Session, as_of: date | None = None) -> None:
     settings = get_settings()
     spent = get_month_to_date_cost_jpy(session, as_of)
