@@ -319,7 +319,7 @@ def test_generate_step_stops_when_budget_exceeded(monkeypatch: pytest.MonkeyPatc
     def _raise_budget_exceeded(_session: Session) -> None:
         raise BudgetExceededError("budget exceeded")
 
-    monkeypatch.setattr("app.harness.pipeline.check_budget", _raise_budget_exceeded)
+    monkeypatch.setattr("app.harness.generation.check_budget", _raise_budget_exceeded)
 
     fake_llm = FakeLlmClient([], [])
 
