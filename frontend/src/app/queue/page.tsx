@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type Content, fetchContents, markContentPosted } from "@/lib/api";
 
 function buildRoomText(content: Content): string {
@@ -18,16 +18,29 @@ export default function QueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
     fetchContents(["approved"], "scheduled_at")
-      .then((res) => setContents(res.items))
-      .catch((err: unknown) => {
-        setError(err instanceof ApiError ? err.message : "取得に失敗しました");
+      .then((res) => {
+        if (mountedRef.current) setContents(res.items);
       })
-      .finally(() => setLoading(false));
+      .catch((err: unknown) => {
+        if (mountedRef.current) {
+          setError(err instanceof ApiError ? err.message : "取得に失敗しました");
+        }
+      })
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -37,10 +50,11 @@ export default function QueuePage() {
   const handleCopy = async (key: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      if (!mountedRef.current) return;
       setCopiedKey(key);
       setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 2000);
     } catch {
-      setError("クリップボードへのコピーに失敗しました");
+      if (mountedRef.current) setError("クリップボードへのコピーに失敗しました");
     }
   };
 
@@ -51,9 +65,11 @@ export default function QueuePage() {
       await markContentPosted(id);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "投稿完了マークに失敗しました");
+      if (mountedRef.current) {
+        setError(err instanceof ApiError ? err.message : "投稿完了マークに失敗しました");
+      }
     } finally {
-      setBusyId(null);
+      if (mountedRef.current) setBusyId(null);
     }
   };
 

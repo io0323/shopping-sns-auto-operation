@@ -61,6 +61,7 @@ async def http_exception_handler(
     code = _ERROR_CODES.get(exc.status_code, "INTERNAL")
     return JSONResponse(
         status_code=exc.status_code,
+        # pyrefly: ignore [unnecessary-type-conversion]
         content={"error": {"code": code, "message": str(exc.detail)}},
     )
 

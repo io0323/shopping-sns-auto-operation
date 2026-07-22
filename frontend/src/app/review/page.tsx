@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
   type Content,
+  type ContentUpdatePayload,
   approveContent,
   fetchContents,
   rejectContent,
@@ -36,18 +37,40 @@ function toDraft(content: Content): Draft {
   };
 }
 
+function sameHashtags(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((tag, index) => tag === b[index]);
+}
+
+function diffDraft(content: Content, draft: Draft): ContentUpdatePayload {
+  const payload: ContentUpdatePayload = {};
+  if (draft.title !== content.title) payload.title = draft.title;
+  if (draft.description !== content.description) payload.description = draft.description;
+  if (!sameHashtags(draft.hashtags, content.hashtags)) payload.hashtags = draft.hashtags;
+  if (draft.x_post !== content.x_post) payload.x_post = draft.x_post;
+  if (draft.cta !== content.cta) payload.cta = draft.cta;
+  return payload;
+}
+
 export default function ReviewPage() {
   const [contents, setContents] = useState<Content[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
     fetchContents(["evaluated", "needs_review"], "-created_at")
       .then((res) => {
+        if (!mountedRef.current) return;
         setContents(res.items);
         const nextDrafts: Record<string, Draft> = {};
         res.items.forEach((content) => {
@@ -56,9 +79,12 @@ export default function ReviewPage() {
         setDrafts(nextDrafts);
       })
       .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setError(err instanceof ApiError ? err.message : "コンテンツの取得に失敗しました");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -82,10 +108,18 @@ export default function ReviewPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : failMessage);
+      if (mountedRef.current) {
+        setError(err instanceof ApiError ? err.message : failMessage);
+      }
     } finally {
-      setBusyId(null);
+      if (mountedRef.current) setBusyId(null);
     }
+  };
+
+  const handleSave = (content: Content, draft: Draft) => {
+    const payload = diffDraft(content, draft);
+    if (Object.keys(payload).length === 0) return;
+    withBusy(content.id, () => updateContent(content.id, payload), "保存に失敗しました");
   };
 
   return (
@@ -190,13 +224,7 @@ export default function ReviewPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    withBusy(
-                      content.id,
-                      () => updateContent(content.id, draft),
-                      "保存に失敗しました",
-                    )
-                  }
+                  onClick={() => handleSave(content, draft)}
                   className="rounded bg-gray-700 px-3 py-1.5 text-xs text-white disabled:opacity-50"
                 >
                   保存

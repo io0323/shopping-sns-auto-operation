@@ -33,6 +33,11 @@ def generate_and_evaluate_candidates(
 
         product = session.get(Product, candidate.product_id)
         if product is None:
+            logger.warning(
+                "product not found for candidate: candidate_id=%s product_id=%s",
+                candidate.id,
+                candidate.product_id,
+            )
             failed += 1
             continue
 

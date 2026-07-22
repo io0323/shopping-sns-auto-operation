@@ -101,8 +101,6 @@ def update_content(
         content.edited_by_human = True
 
     session.add(content)
-    session.commit()
-
     if updates:
         record_operation(
             session,
@@ -111,6 +109,7 @@ def update_content(
             target_id=content.id,
             detail={"fields": list(updates.keys())},
         )
+    session.commit()
 
     product = session.get(Product, content.product_id)
     product_name = product.name if product is not None else ""
@@ -122,8 +121,8 @@ def approve_content(content_id: uuid.UUID, session: Session = Depends(get_db)) -
     content = _get_content_or_404(session, content_id)
     content.status = "approved"
     session.add(content)
-    session.commit()
     record_operation(session, operation="approve", target_type="content", target_id=content.id)
+    session.commit()
 
     product = session.get(Product, content.product_id)
     return _to_content_out(content, product.name if product is not None else "")
@@ -134,8 +133,8 @@ def reject_content(content_id: uuid.UUID, session: Session = Depends(get_db)) ->
     content = _get_content_or_404(session, content_id)
     content.status = "rejected"
     session.add(content)
-    session.commit()
     record_operation(session, operation="reject", target_type="content", target_id=content.id)
+    session.commit()
 
     product = session.get(Product, content.product_id)
     return _to_content_out(content, product.name if product is not None else "")
@@ -147,10 +146,10 @@ def mark_content_posted(content_id: uuid.UUID, session: Session = Depends(get_db
     content.status = "posted"
     content.posted_at = datetime.now(UTC)
     session.add(content)
-    session.commit()
     record_operation(
         session, operation="mark-posted", target_type="content", target_id=content.id
     )
+    session.commit()
 
     product = session.get(Product, content.product_id)
     return _to_content_out(content, product.name if product is not None else "")

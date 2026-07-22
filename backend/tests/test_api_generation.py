@@ -1,5 +1,7 @@
 import json
 from datetime import date
+from types import SimpleNamespace
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
@@ -49,9 +51,7 @@ class _FakeAnthropicClient:
         )
         self.messages = self
 
-    def create(self, **kwargs):  # type: ignore[no-untyped-def]
-        from types import SimpleNamespace
-
+    def create(self, **kwargs: Any) -> SimpleNamespace:
         text = next(self._responses)
         return SimpleNamespace(
             content=[SimpleNamespace(type="text", text=text)],

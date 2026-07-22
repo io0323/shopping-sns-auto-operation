@@ -88,6 +88,22 @@ def test_patch_content_404_when_missing(api_client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_patch_content_rejects_unknown_fields(
+    api_client: TestClient, db_session_factory: sessionmaker[Session]
+) -> None:
+    session = db_session_factory()
+    product = make_product(session)
+    candidate = make_candidate(session, product)
+    content = make_content(session, product, candidate)
+    content_id = content.id
+    session.close()
+
+    response = api_client.patch(
+        f"/api/v1/contents/{content_id}", json={"status": "approved"}
+    )
+    assert response.status_code == 422
+
+
 def test_approve_content_updates_status_and_logs(
     api_client: TestClient, db_session_factory: sessionmaker[Session]
 ) -> None:

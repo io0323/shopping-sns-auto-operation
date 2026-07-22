@@ -13,6 +13,7 @@ def record_operation(
     target_id: uuid.UUID,
     detail: dict[str, Any] | None = None,
 ) -> None:
+    """target操作とセットでコミットされるよう、ここではcommitしない(呼び出し側が担う)。"""
     session.add(
         OperationLog(
             operation=operation,
@@ -21,4 +22,3 @@ def record_operation(
             detail=detail,
         )
     )
-    session.commit()

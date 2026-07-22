@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -10,6 +11,8 @@ from app.core.db import get_db, get_session_factory
 from app.harness.generation import generate_and_evaluate_candidates
 from app.models import Candidate, Job
 from app.schemas.content import GenerateRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -34,6 +37,7 @@ def _run_generate_job(job_id: uuid.UUID, candidate_ids: list[uuid.UUID]) -> None
             payload["result"] = result
             job.payload = payload
         except Exception as exc:
+            logger.exception("generation job failed: job_id=%s", job_id)
             job.status = "failed"
             job.error = str(exc)
         finally:

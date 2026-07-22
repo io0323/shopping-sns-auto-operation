@@ -97,8 +97,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(
       response.status,
-      body?.error.code ?? "UNKNOWN",
-      body?.error.message ?? response.statusText,
+      body?.error?.code ?? "UNKNOWN",
+      body?.error?.message ?? response.statusText,
     );
   }
 

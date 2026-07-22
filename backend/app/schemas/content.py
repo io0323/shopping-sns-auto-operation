@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.common import PageMeta
 
@@ -35,6 +35,8 @@ class ContentListResponse(BaseModel):
 
 
 class ContentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = None
     description: str | None = None
     hashtags: list[str] | None = None
