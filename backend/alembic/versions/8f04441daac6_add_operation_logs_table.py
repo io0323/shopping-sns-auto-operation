@@ -1,0 +1,34 @@
+"""add operation_logs table
+
+Revision ID: 8f04441daac6
+Revises: 8a50e09df26a
+Create Date: 2026-07-22 16:19:48.067551
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = '8f04441daac6'
+down_revision: Union[str, Sequence[str], None] = '8a50e09df26a'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.create_table('operation_logs',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('operation', sa.String(length=32), nullable=False),
+    sa.Column('target_type', sa.String(length=32), nullable=False),
+    sa.Column('target_id', sa.Uuid(), nullable=False),
+    sa.Column('detail', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+
+
+def downgrade() -> None:
+    op.drop_table('operation_logs')

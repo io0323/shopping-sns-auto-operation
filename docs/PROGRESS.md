@@ -73,7 +73,30 @@
 
 ## Phase 2: レビューUI + Export + CSVインポート + 分析ダッシュボード
 
-- 状態: 未着手
+- 状態: 進行中(2-1完了、2026-07-22)
+- Phase 2-1 実施内容:
+  - バックエンド(詳細設計2章、learning-report・POST /import/affiliate-csv・GET /export/queue・POST /prompts/{agent}/activateを除く。理由は下記「設計書に無い判断」参照):
+    - `GET /products`(genre_id/min_score/excluded フィルタ、ページング)、`GET /products/{id}/metrics`
+    - `GET /candidates?date=`(product情報+score_breakdown付き、スコア降順)
+    - `POST /generate`(`{candidate_ids}` → 202 Accepted + `{job_id}`。FastAPI `BackgroundTasks`で`harness/generation.py`の共通処理を非同期実行)、`GET /jobs/{id}`(ポーリング用)
+    - `GET /contents?status=`(複数指定可、sort許可リストによる並び替え)、`PATCH /contents/{id}`(本文編集時のみ`edited_by_human=true`を自動設定。scheduled_atのみの更新では立てない)、`POST /contents/{id}/approve` / `/reject` / `/mark-posted`(posted_at記録)
+    - 共通仕様: ページング(`page`/`per_page`/`meta.total`)、エラーレスポンス`{"error":{"code","message"}}`(既存の例外ハンドラを流用)
+    - 操作ログ: 新設した`operation_logs`テーブル(id, operation, target_type, target_id, detail, created_at)に承認・除外・投稿マーク・編集を記録する`core/operation_log.py`の`record_operation`を追加
+    - `harness/generation.py`: Phase1-4の`harness/pipeline.py`から候補ごとの生成+評価ループ(Cost Guard確認・商品単位の例外継続)を切り出し、日次パイプラインと手動`POST /generate`の両方から共有
+    - CORS: フロントエンド(`http://localhost:3000`)からの呼び出しを許可する`CORSMiddleware`を追加
+  - フロントエンド(Next.js App Router、日本語表示、`NEXT_PUBLIC_API_BASE_URL`未設定時は`http://localhost:8000`を既定):
+    - `/candidates`: 当日候補一覧。スコアにマウスホバーすると`score_breakdown`をツールチップ表示(日本語ラベル変換)
+    - `/review`: `evaluated`/`needs_review`一覧。タイトル・説明文・ハッシュタグ・X投稿文・CTAを編集して保存(PATCH)、品質スコア内訳表示、承認/除外ボタン
+    - `/queue`: `approved`一覧を`scheduled_at`昇順で表示。ROOM用(タイトル+説明文+ハッシュタグ)/X用テキストをワンタップコピー(Clipboard API)、投稿完了マークボタン
+    - 共通の`lib/api.ts`(型付きfetchラッパー、`ApiError`)、`components/NavBar.tsx`
+  - テスト: `tests/conftest.py`でAPI用のin-memory SQLiteフィクスチャ(バックグラウンドタスクからの独立セッションも同じ接続を共有するようcore/dbのモジュールグローバルを差し替え)を新設。products/candidates/contents(一覧・フィルタ・ソート不正値・PATCH・承認・除外・投稿マーク・操作ログ記録)/generate(202→ジョブ完了→Content生成の一連)を検証(`tests/test_api_*.py`)
+  - 検証: `uv run pytest`(91 passed)、`uv run ruff check .`、`uv run mypy app`。フロントエンドは`npm run build`/`npm run lint`に加え、実際にbackend(移行済みDBにシードデータ投入)とfrontend devサーバーを起動し、各ページのSSRシェル・CORSヘッダー・PATCH/approve/mark-postedの実APIフローをcurlで確認(ブラウザでのクリック操作自体は自動化ツールが無いため未実施)
+- Phase 2-1 設計書に無い判断:
+  - `詳細設計2章のAPIを実装せよ(learning-report以外)`は文言通りには全API網羅を意味するが、`docs/04_ClaudeCodeプロンプト.md`のフェーズ別プロンプトでは`GET /export/queue`と`POST /import/affiliate-csv`はPhase2-2(`agents/export.py`/`agents/importer.py`)、`POST /prompts/{agent}/activate`はPhase3(Learning Agent)に明示的に割り当てられている。フェーズ別実行ガイドを優先し、これらとGET /analytics/summary・GET /costs(Phase2-2の/dashboard・/analytics向け)は今回スコープ外とした
+  - `/queue`フロントエンドはPhase2-2で実装予定の`GET /export/queue`(ハッシュタグ整形・#ad確認・投稿チェックリスト付き)ではなく、既存の`GET /contents?status=approved`をそのまま使用し、ROOM用テキストはクライアント側で`title+description+hashtags`を組み立てて簡易的に生成した。Phase2-2でexport.py実装後に差し替える想定
+  - 操作ログは詳細設計に表形式の記載はあるが専用テーブルが無いため、`operation_logs`テーブルを新設(Alembicマイグレーション追加)
+  - PATCH /contents/{id}のedited_by_humanは、タイトル/説明文/ハッシュタグ/X投稿文/CTAのいずれかを変更した場合のみtrueにする(scheduled_atのみの変更では人間による本文修正とみなさない)
+  - POST /generateの`job.pipeline`は詳細設計1章に例示されている`manual_generate`を採用
 
 ## Phase 3: Learning Agent + プロンプト版管理 + 改善提案フロー
 
