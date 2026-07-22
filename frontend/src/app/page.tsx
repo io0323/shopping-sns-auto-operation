@@ -2,6 +2,11 @@ import Link from "next/link";
 
 const LINKS = [
   {
+    href: "/dashboard",
+    label: "ダッシュボード",
+    description: "本日の候補数・要確認数・コスト・KPIを一覧できます",
+  },
+  {
     href: "/candidates",
     label: "候補一覧",
     description: "当日のスコア付き投稿候補を確認します",
@@ -15,6 +20,16 @@ const LINKS = [
     href: "/queue",
     label: "投稿キュー",
     description: "承認済みコンテンツをコピーして投稿します",
+  },
+  {
+    href: "/import",
+    label: "実績取込",
+    description: "アフィリエイトレポートCSVを取り込みます",
+  },
+  {
+    href: "/analytics",
+    label: "分析",
+    description: "クリック・成果・報酬額をジャンル別に確認します",
   },
 ];
 

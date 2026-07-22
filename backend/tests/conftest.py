@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.core.db as db_module
 from app.main import app
-from app.models import Base, Candidate, Content, Product
+from app.models import Base, Candidate, Content, Job, LlmUsage, Product, Result
 
 
 @pytest.fixture
@@ -100,3 +100,44 @@ def make_content(
     session.add(content)
     session.commit()
     return content
+
+
+def make_result(session: Session, product: Product, **overrides: Any) -> Result:
+    defaults: dict[str, Any] = {
+        "product_id": product.id,
+        "report_date_from": date(2026, 7, 1),
+        "report_date_to": date(2026, 7, 7),
+        "clicks": 10,
+        "conversions": 1,
+        "revenue": 500,
+    }
+    defaults.update(overrides)
+    result = Result(**defaults)
+    session.add(result)
+    session.commit()
+    return result
+
+
+def make_job(session: Session, **overrides: Any) -> Job:
+    defaults: dict[str, Any] = {"pipeline": "daily", "step": "generate", "status": "done"}
+    defaults.update(overrides)
+    job = Job(**defaults)
+    session.add(job)
+    session.commit()
+    return job
+
+
+def make_llm_usage(session: Session, job: Job, **overrides: Any) -> LlmUsage:
+    defaults: dict[str, Any] = {
+        "job_id": job.id,
+        "agent": "generator",
+        "model": "claude-sonnet-5",
+        "input_tokens": 100,
+        "output_tokens": 200,
+        "estimated_cost_jpy": 1.5,
+    }
+    defaults.update(overrides)
+    usage = LlmUsage(**defaults)
+    session.add(usage)
+    session.commit()
+    return usage
