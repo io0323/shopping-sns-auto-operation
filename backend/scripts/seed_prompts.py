@@ -16,6 +16,7 @@ PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 SEED_PROMPTS = (
     ("generator", "gen-v1", PROMPTS_DIR / "generator" / "gen-v1.txt"),
     ("evaluator", "eval-v1", PROMPTS_DIR / "evaluator" / "eval-v1.txt"),
+    ("learning", "learning-v1", PROMPTS_DIR / "learning" / "learning-v1.txt"),
 )
 
 

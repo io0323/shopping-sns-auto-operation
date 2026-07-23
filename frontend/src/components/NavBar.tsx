@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/queue", label: "投稿キュー" },
   { href: "/import", label: "実績取込" },
   { href: "/analytics", label: "分析" },
+  { href: "/analytics/learning", label: "学習レポート" },
 ];
 
 export function NavBar() {

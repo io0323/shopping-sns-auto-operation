@@ -113,4 +113,28 @@
 
 ## Phase 3: Learning Agent + プロンプト版管理 + 改善提案フロー
 
-- 状態: 未着手
+- 状態: 完了(2026-07-23)
+- 実施内容:
+  - `agents/learning.py`:
+    - `build_learning_dataset`: `results`を起点に、同一`product_id`かつ`status=posted`で`posted_at`が`report_date_from`〜`report_date_to`期間内の`contents`を突合(直近優先)。該当`contents`の`candidate_id`から`candidates`も参照し、ジャンル(products.genre_name)・description長・ハッシュタグ数・品質スコア5軸(quality_breakdown)・edited_by_human・candidateのスコア・clicks/conversions/revenueを1レコードにまとめる
+    - 実績30件未満(`MIN_DATASET_SIZE=30`)の場合は`status=insufficient_data`を返して終了(LLM呼出なし)
+    - Cost Guard: LLM呼出前に`check_budget`を確認し、超過時は`status=budget_exceeded`で終了(daily pipelineのgenerateステップと同様の方針)
+    - `split_high_low_performers`: revenue降順で並べ、上位/下位それぞれ1/3を高成果群/低成果群とする
+    - `summarize_group`: 各群の平均値・ジャンル分布・edited_by_human比率等を集計し、生JSONではなく集計サマリをLLMプロンプトに埋め込む(トークン数抑制・再現性のため)
+    - LLM(`agent=learning`、`MODEL_LEARNING`環境変数、ハードコード禁止ルール準拠)に現行有効なGeneratorプロンプト本文+高成果群/低成果群サマリを渡し、週次レポート(summary/high_performer_patterns/low_performer_patterns/recommendations)とGeneratorプロンプト改善案(`proposed_generator_prompt`)+採用根拠(`rationale`)をJSONで取得
+    - 改善案は新しい`prompt_versions`行(`agent=generator`、バージョンは既存最大値から自動採番した`gen-vN`、**`is_active=false`**、`note`に根拠)として保存するのみで、**自動有効化は行わない**(指示通り)
+  - `prompts/learning/learning-v1.txt`: Learning Agent自身の実行プロンプト(設計書4章に雛形が無いため新規作成。generator/evaluatorと同じ`{placeholder}`置換方式)。`scripts/seed_prompts.py`に`(learning, learning-v1)`を追加し、他エージェントと同様にseed時から有効化しておく(Learning自身の実行プロンプトであり、改善提案の対象であるgeneratorプロンプトとは別物)
+  - `harness/pipeline.py`: `run_weekly_pipeline`(`learning` → `notify`の2ステップ、`_run_step`による状態管理・再開対応はdaily pipelineと共通)。`create_scheduler()`に日曜06:00のcronジョブ(`weekly-pipeline`)を追加。二重起動防止・Slack通知は既存のdaily pipelineと同じ仕組みを再利用
+  - `api/prompts.py`: `POST /prompts/{agent}/activate`(body: `{"prompt_version_id"}`)。対象行の`agent`がパスパラメータと一致することを検証し、同一agentの他の`is_active=true`行をfalseに戻してから対象をtrueにする(agentごとに1つの制約を保つ)。承認操作は`operation_log`に記録(`operation=activate_prompt`)
+  - `api/analytics.py`に`GET /analytics/learning-report`を追加。専用テーブルを新設せず、`jobs`テーブル(`pipeline=weekly`, `step=learning`, `status=done`)の最新行の`payload`(`run_date`と`result`)から週次レポートを再構成して返す。レポート未生成時は`status=no_report`を返す
+  - フロントエンド: `/analytics/learning`にレポート閲覧(サマリー・高成果群/低成果群の特徴・推奨事項)と改善案(Generatorプロンプト全文・根拠・「承認して有効化」ボタン)を実装。NavBarに「学習レポート」リンクを追加
+  - テスト: `build_learning_dataset`の突合ロジック(posted以外除外、期間外除外)、`split_high_low_performers`/`summarize_group`の集計、`run_learning`の30件未満スキップ・Cost Guard超過スキップ・LLM成功時のprompt_versions作成(`tests/test_learning.py`)、`run_weekly_pipeline`のスキップ/完了/二重起動/再開(`tests/test_weekly_pipeline.py`)、`POST /prompts/{agent}/activate`の切替・agent不一致404・未知フィールド拒否(`tests/test_api_prompts.py`)、`GET /analytics/learning-report`の未生成/生成済み(`tests/test_api_analytics.py`)を追加
+  - 検証: `uv run pytest`(133 passed)、`uv run ruff check .`、`uv run mypy app`(プロジェクト標準のlintスコープに合わせ`app`のみを対象。`tests/`配下は既存のFake*クライアント群も同様にmypy対象外)。`npm run lint`/`npm run build`。さらに実際にuvicorn/Next.jsのdevサーバーを起動し、DB未生成時の`no_report`、`jobs.payload`経由の`completed`レポート、`POST /prompts/{agent}/activate`によるis_active切替(旧バージョンが自動的にfalseになること含む)を実APIで確認、`/analytics/learning`ページのコンパイル・200応答も確認
+- Phase 3 設計書に無い判断:
+  - `results.content_id`はPhase2-2の時点で常にNULLの仕様としたため(CSV上に投稿を一意特定する情報が無いため)、Learning Agentでの実績⇔コンテンツ突合は`product_id`一致 + `contents.posted_at`が`results`の集計期間内、という独自のヒューリスティックで行った。同一商品を集計期間内に複数回投稿していた場合は最新の`posted_at`を優先する
+  - 高成果/低成果の指標は「成果報酬額(revenue)」を採用した(要件定義・基本設計とも「成果」の定義が厳密でないため、最終的な事業指標である報酬額を採用)
+  - 高成果群/低成果群の分割は上位/下位それぞれ1/3(tertile)とした。設計書に閾値の指定が無いため、一般的な「上位・下位比較」の手法として採用
+  - Learning Agentの改善提案は「Generatorプロンプトの新バージョン」のみを対象とし、02_基本設計に将来拡張として触れられている「スコア重み設定への反映」は今回のPhase3プロンプト(prompt_versionsへの保存・POST /prompts/{agent}/activateのみ言及)の範囲外としてスコープしなかった
+  - 週次レポート自体を保持する専用テーブルは詳細設計1章の9テーブルに存在しないため、既存の`jobs.payload`(daily pipelineの`run_date`格納と同じ仕組み)に格納する方式とした。新規テーブル追加やマイグレーションは発生していない
+  - `POST /prompts/{agent}/activate`の対象特定は、バージョン文字列ではなく`prompt_version_id`(UUID)とした(バージョン文字列はagent内で一意である前提だが、IDの方が曖昧さがなく他のAPI(`/contents/{id}`等)とも一貫するため)
+  - weekly pipelineの手動起動API(`POST /pipelines/weekly/run`)は今回のPhase3プロンプトで明示的に要求されていないため追加しなかった(daily pipelineには存在するが、スコープ外の機能追加を避けた)

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data.db"
     model_generator: str = "claude-sonnet-5"
     model_evaluator: str = "claude-haiku-4-5"
+    model_learning: str = "claude-sonnet-5"
     usd_jpy_rate: float = 150.0
     slack_webhook_url: str = ""
 

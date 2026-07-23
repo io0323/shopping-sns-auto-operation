@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.core.db as db_module
 from app.main import app
-from app.models import Base, Candidate, Content, Job, LlmUsage, Product, Result
+from app.models import Base, Candidate, Content, Job, LlmUsage, Product, PromptVersion, Result
 
 
 @pytest.fixture
@@ -141,3 +141,17 @@ def make_llm_usage(session: Session, job: Job, **overrides: Any) -> LlmUsage:
     session.add(usage)
     session.commit()
     return usage
+
+
+def make_prompt_version(session: Session, **overrides: Any) -> PromptVersion:
+    defaults: dict[str, Any] = {
+        "agent": "generator",
+        "version": "gen-v1",
+        "body": "プロンプト本文",
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    prompt_version = PromptVersion(**defaults)
+    session.add(prompt_version)
+    session.commit()
+    return prompt_version
