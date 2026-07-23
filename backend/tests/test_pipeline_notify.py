@@ -35,7 +35,7 @@ def test_send_slack_notification_posts_when_configured(monkeypatch: pytest.Monke
     )
 
 
-def test_send_slack_notification_swallow_http_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_send_slack_notification_reraises_http_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     import httpx
 
     monkeypatch.setattr(
@@ -48,4 +48,25 @@ def test_send_slack_notification_swallow_http_errors(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr("app.harness.pipeline.httpx.post", _raise)
 
-    _send_slack_notification("test")  # should not raise
+    with pytest.raises(httpx.HTTPError):
+        _send_slack_notification("test")
+
+
+def test_send_slack_notification_raises_on_error_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    monkeypatch.setattr(
+        "app.harness.pipeline.get_settings",
+        lambda: SimpleNamespace(slack_webhook_url="https://hooks.slack.example/services/x"),
+    )
+
+    def _post(*args: Any, **kwargs: Any) -> httpx.Response:
+        request = httpx.Request("POST", "https://hooks.slack.example/services/x")
+        return httpx.Response(status_code=500, request=request)
+
+    monkeypatch.setattr("app.harness.pipeline.httpx.post", _post)
+
+    with pytest.raises(httpx.HTTPError):
+        _send_slack_notification("test")

@@ -82,9 +82,11 @@ def _send_slack_notification(message: str) -> None:
     if not settings.slack_webhook_url:
         return
     try:
-        httpx.post(settings.slack_webhook_url, json={"text": message}, timeout=5.0)
+        response = httpx.post(settings.slack_webhook_url, json={"text": message}, timeout=5.0)
+        response.raise_for_status()
     except httpx.HTTPError:
         logger.exception("Slack通知の送信に失敗しました")
+        raise
 
 
 def run_daily_pipeline(
@@ -209,6 +211,8 @@ def run_weekly_pipeline(
         )
     elif learning_result["status"] == "budget_exceeded":
         message = "月間LLM予算上限に達したため、今週の学習をスキップしました"
+    elif learning_result["status"] == "invalid_llm_response":
+        message = "Learning Agentの応答を解析できなかったため、今週の改善提案はスキップしました"
     else:
         message = (
             f"週次学習レポートを生成しました"

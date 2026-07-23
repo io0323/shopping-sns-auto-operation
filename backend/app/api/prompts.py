@@ -14,16 +14,19 @@ router = APIRouter()
 def activate_prompt(
     agent: str, payload: PromptActivateRequest, session: Session = Depends(get_db)
 ) -> PromptVersionOut:
-    target = session.get(PromptVersion, payload.prompt_version_id)
-    if target is None or target.agent != agent:
+    # agent単位で行ロックし、同時activateによる複数is_active=true化を防ぐ
+    # (SQLiteではwith_for_updateは無視されるが、PostgreSQL移行後は有効に働く)
+    stmt = select(PromptVersion).where(PromptVersion.agent == agent).with_for_update()
+    agent_versions = {row.id: row for row in session.execute(stmt).scalars()}
+
+    target = agent_versions.get(payload.prompt_version_id)
+    if target is None:
         raise HTTPException(status_code=404, detail="プロンプトが見つかりません")
 
-    stmt = select(PromptVersion).where(
-        PromptVersion.agent == agent, PromptVersion.is_active.is_(True)
-    )
-    for other in session.execute(stmt).scalars():
-        other.is_active = False
-        session.add(other)
+    for other in agent_versions.values():
+        if other.id != target.id and other.is_active:
+            other.is_active = False
+            session.add(other)
 
     target.is_active = True
     session.add(target)

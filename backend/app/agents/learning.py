@@ -1,11 +1,12 @@
 import json
+import logging
 import re
 import uuid
 from datetime import datetime
 from statistics import mean
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,8 @@ from app.clients.llm import LlmClient
 from app.core.config import get_settings
 from app.harness.cost_guard import BudgetExceededError, check_budget
 from app.models import Candidate, Content, Product, PromptVersion, Result
+
+logger = logging.getLogger(__name__)
 
 MIN_DATASET_SIZE = 30
 _GENERATOR_VERSION_RE = re.compile(r"^gen-v(\d+)$")
@@ -218,7 +221,17 @@ def run_learning(session: Session, llm_client: LlmClient, job_id: uuid.UUID) -> 
         prompt=prompt,
         max_tokens=2048,
     )
-    parsed = parse_learning_result(result.text)
+    try:
+        parsed = parse_learning_result(result.text)
+    except (json.JSONDecodeError, ValidationError):
+        logger.exception("learning agent response could not be parsed")
+        return {
+            "status": "invalid_llm_response",
+            "data_point_count": len(dataset),
+            "report": None,
+            "proposed_prompt_version_id": None,
+            "proposed_prompt_version": None,
+        }
 
     next_version = _next_generator_version(session)
     proposed = PromptVersion(

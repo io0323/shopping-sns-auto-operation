@@ -91,6 +91,12 @@ export default function LearningReportPage() {
         </p>
       )}
 
+      {!loading && report?.status === "invalid_llm_response" && (
+        <p className="text-sm text-amber-600">
+          Learning Agentの応答を解析できなかったため、今回の改善提案はスキップされました
+        </p>
+      )}
+
       {!loading && report?.status === "completed" && report.report && (
         <div className="space-y-6">
           {report.run_date && (

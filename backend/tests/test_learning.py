@@ -275,3 +275,51 @@ def test_run_learning_creates_proposed_prompt_version() -> None:
     assert proposed.is_active is False
     assert proposed.body == "改善後のプロンプト本文"
     assert proposed.note == "高成果群の特徴を反映"
+
+
+def test_run_learning_returns_invalid_llm_response_on_malformed_json() -> None:
+    session = _make_session()
+    _seed_prompts(session)
+    for i in range(MIN_DATASET_SIZE):
+        _seed_datapoint(session, i, revenue=100)
+
+    class MalformedLlmClient:
+        def complete(
+            self, *, job_id: uuid.UUID, agent: str, model: str, prompt: str, max_tokens: int = 1024
+        ) -> LlmResult:
+            return LlmResult(
+                text="not json", input_tokens=10, output_tokens=10, estimated_cost_jpy=0.0
+            )
+
+    result = run_learning(session, MalformedLlmClient(), uuid.uuid4())  # type: ignore[arg-type]
+
+    assert result["status"] == "invalid_llm_response"
+    assert result["data_point_count"] == MIN_DATASET_SIZE
+    generator_versions = (
+        session.execute(select(PromptVersion).where(PromptVersion.agent == "generator"))
+        .scalars()
+        .all()
+    )
+    assert len(generator_versions) == 1
+
+
+def test_run_learning_returns_invalid_llm_response_on_schema_mismatch() -> None:
+    session = _make_session()
+    _seed_prompts(session)
+    for i in range(MIN_DATASET_SIZE):
+        _seed_datapoint(session, i, revenue=100)
+
+    class SchemaMismatchLlmClient:
+        def complete(
+            self, *, job_id: uuid.UUID, agent: str, model: str, prompt: str, max_tokens: int = 1024
+        ) -> LlmResult:
+            return LlmResult(
+                text=json.dumps({"unexpected": "shape"}),
+                input_tokens=10,
+                output_tokens=10,
+                estimated_cost_jpy=0.0,
+            )
+
+    result = run_learning(session, SchemaMismatchLlmClient(), uuid.uuid4())  # type: ignore[arg-type]
+
+    assert result["status"] == "invalid_llm_response"

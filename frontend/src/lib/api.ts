@@ -141,7 +141,12 @@ export interface LearningReportContent {
 
 export interface LearningReport {
   run_date: string | null;
-  status: "no_report" | "insufficient_data" | "budget_exceeded" | "completed";
+  status:
+    | "no_report"
+    | "insufficient_data"
+    | "budget_exceeded"
+    | "invalid_llm_response"
+    | "completed";
   data_point_count: number | null;
   report: LearningReportContent | null;
   proposed_prompt_version: PromptVersion | null;
