@@ -18,6 +18,7 @@ from app.api.imports import router as imports_router
 from app.api.jobs import router as jobs_router
 from app.api.pipelines import router as pipelines_router
 from app.api.products import router as products_router
+from app.api.prompts import router as prompts_router
 from app.core.logging import setup_logging
 from app.harness.pipeline import create_scheduler
 
@@ -54,6 +55,7 @@ app.include_router(export_router, prefix="/api/v1")
 app.include_router(imports_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(costs_router, prefix="/api/v1")
+app.include_router(prompts_router, prefix="/api/v1")
 
 _ERROR_CODES = {
     404: "NOT_FOUND",

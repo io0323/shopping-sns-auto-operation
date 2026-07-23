@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents.learning import MIN_DATASET_SIZE, run_learning
 from app.agents.research import StrategyConfig, run_daily_research
 from app.agents.selection import ScoringWeights, SeasonalityConfig, run_daily_selection
 from app.clients.llm import LlmClient
@@ -28,6 +29,7 @@ from app.models import Candidate, Content, Job
 logger = logging.getLogger(__name__)
 
 PIPELINE_NAME = "daily"
+WEEKLY_PIPELINE_NAME = "weekly"
 
 
 def _run_step(
@@ -179,12 +181,78 @@ def _run_daily_pipeline_job() -> None:
             logger.exception("scheduled daily pipeline failed")
 
 
+def run_weekly_pipeline(
+    session: Session,
+    run_date: date | None = None,
+    llm_client: LlmClient | None = None,
+) -> dict[str, Any]:
+    if is_pipeline_running(session, WEEKLY_PIPELINE_NAME):
+        raise PipelineAlreadyRunningError(
+            f"パイプライン({WEEKLY_PIPELINE_NAME})は既に実行中です"
+        )
+
+    run_date = run_date or date.today()
+    llm_client = llm_client or LlmClient(session)
+
+    learning_result = _run_step(
+        session,
+        WEEKLY_PIPELINE_NAME,
+        "learning",
+        run_date,
+        lambda job: run_learning(session, llm_client, job.id),
+    )
+
+    if learning_result["status"] == "insufficient_data":
+        message = (
+            f"実績データが{learning_result['data_point_count']}件のため、"
+            f"学習をスキップしました({MIN_DATASET_SIZE}件以上で分析)"
+        )
+    elif learning_result["status"] == "budget_exceeded":
+        message = "月間LLM予算上限に達したため、今週の学習をスキップしました"
+    else:
+        message = (
+            f"週次学習レポートを生成しました"
+            f"(データ{learning_result['data_point_count']}件、"
+            f"提案プロンプト{learning_result['proposed_prompt_version']})"
+        )
+
+    def _notify(_job: Job) -> dict[str, Any]:
+        logger.info(message)
+        _send_slack_notification(message)
+        return {"message": message}
+
+    notify_result = _run_step(session, WEEKLY_PIPELINE_NAME, "notify", run_date, _notify)
+
+    return {
+        "run_date": run_date.isoformat(),
+        "learning": learning_result,
+        "notify": notify_result,
+    }
+
+
+def _run_weekly_pipeline_job() -> None:
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        try:
+            run_weekly_pipeline(session)
+        except PipelineAlreadyRunningError:
+            logger.warning("scheduled weekly pipeline skipped: already running")
+        except Exception:
+            logger.exception("scheduled weekly pipeline failed")
+
+
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         _run_daily_pipeline_job,
         CronTrigger(hour=5, minute=0),
         id=f"{PIPELINE_NAME}-pipeline",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_weekly_pipeline_job,
+        CronTrigger(day_of_week="sun", hour=6, minute=0),
+        id=f"{WEEKLY_PIPELINE_NAME}-pipeline",
         replace_existing=True,
     )
     return scheduler
@@ -194,4 +262,5 @@ __all__ = [
     "PipelineAlreadyRunningError",
     "create_scheduler",
     "run_daily_pipeline",
+    "run_weekly_pipeline",
 ]

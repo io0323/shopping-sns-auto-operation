@@ -122,6 +122,31 @@ export interface CostSummary {
   by_agent: AgentCost[];
 }
 
+export interface PromptVersion {
+  id: string;
+  agent: string;
+  version: string;
+  body: string;
+  is_active: boolean;
+  note: string | null;
+  created_at: string;
+}
+
+export interface LearningReportContent {
+  summary: string;
+  high_performer_patterns: string[];
+  low_performer_patterns: string[];
+  recommendations: string[];
+}
+
+export interface LearningReport {
+  run_date: string | null;
+  status: "no_report" | "insufficient_data" | "budget_exceeded" | "completed";
+  data_point_count: number | null;
+  report: LearningReportContent | null;
+  proposed_prompt_version: PromptVersion | null;
+}
+
 interface ApiErrorBody {
   error: { code: string; message: string };
 }
@@ -233,4 +258,18 @@ export function fetchAnalyticsSummary(
 export function fetchCosts(month: string): Promise<CostSummary> {
   const params = new URLSearchParams({ month });
   return request<CostSummary>(`/api/v1/costs?${params.toString()}`);
+}
+
+export function fetchLearningReport(): Promise<LearningReport> {
+  return request<LearningReport>("/api/v1/analytics/learning-report");
+}
+
+export function activatePrompt(
+  agent: string,
+  promptVersionId: string,
+): Promise<PromptVersion> {
+  return request<PromptVersion>(`/api/v1/prompts/${agent}/activate`, {
+    method: "POST",
+    body: JSON.stringify({ prompt_version_id: promptVersionId }),
+  });
 }

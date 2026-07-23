@@ -3,7 +3,8 @@ from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
-from tests.conftest import make_product, make_result
+from app.harness.job_queue import finish_step, start_step
+from tests.conftest import make_product, make_prompt_version, make_result
 
 
 def test_analytics_summary_aggregates_totals_and_by_genre(
@@ -67,3 +68,46 @@ def test_analytics_summary_filters_by_date_range(
     )
     assert response.status_code == 200
     assert response.json()["clicks"] == 5
+
+
+def test_learning_report_returns_no_report_when_never_run(api_client: TestClient) -> None:
+    response = api_client.get("/api/v1/analytics/learning-report")
+    assert response.status_code == 200
+    assert response.json()["status"] == "no_report"
+
+
+def test_learning_report_returns_latest_completed_run(
+    api_client: TestClient, db_session_factory: sessionmaker[Session]
+) -> None:
+    session = db_session_factory()
+    proposed = make_prompt_version(
+        session, agent="generator", version="gen-v2", is_active=False, note="根拠"
+    )
+
+    job = start_step(session, "weekly", "learning", date(2026, 7, 19))
+    finish_step(
+        session,
+        job,
+        status="done",
+        result={
+            "status": "completed",
+            "data_point_count": 30,
+            "report": {
+                "summary": "s",
+                "high_performer_patterns": [],
+                "low_performer_patterns": [],
+                "recommendations": [],
+            },
+            "proposed_prompt_version_id": str(proposed.id),
+            "proposed_prompt_version": "gen-v2",
+        },
+    )
+    session.close()
+
+    response = api_client.get("/api/v1/analytics/learning-report")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["data_point_count"] == 30
+    assert body["proposed_prompt_version"]["version"] == "gen-v2"
+    assert body["proposed_prompt_version"]["is_active"] is False

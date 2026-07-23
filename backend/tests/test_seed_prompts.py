@@ -32,7 +32,7 @@ def test_seed_prompts_is_idempotent() -> None:
     with Session(engine) as session:
         rows = session.execute(select(PromptVersion)).scalars().all()
         agents = sorted(row.agent for row in rows)
-        assert agents == ["evaluator", "generator"]
+        assert agents == ["evaluator", "generator", "learning"]
         for row in rows:
             assert row.is_active is True
             assert len(row.body) > 0
