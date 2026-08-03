@@ -138,3 +138,4 @@
   - 週次レポート自体を保持する専用テーブルは詳細設計1章の9テーブルに存在しないため、既存の`jobs.payload`(daily pipelineの`run_date`格納と同じ仕組み)に格納する方式とした。新規テーブル追加やマイグレーションは発生していない
   - `POST /prompts/{agent}/activate`の対象特定は、バージョン文字列ではなく`prompt_version_id`(UUID)とした(バージョン文字列はagent内で一意である前提だが、IDの方が曖昧さがなく他のAPI(`/contents/{id}`等)とも一貫するため)
   - weekly pipelineの手動起動API(`POST /pipelines/weekly/run`)は今回のPhase3プロンプトで明示的に要求されていないため追加しなかった(daily pipelineには存在するが、スコープ外の機能追加を避けた)
+  - `docs/01_要件定義.md`§6のPhase 3行にある「(任意)X API連携」は任意項目であり、当初計画では未実施(X(Twitter)への自動投稿は本Phase 3の実装対象外)
