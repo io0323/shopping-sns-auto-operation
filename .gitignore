@@ -22,3 +22,6 @@ frontend/out/
 
 # OS
 .DS_Store
+
+# Claude Code local overrides
+.claude/settings.local.json
