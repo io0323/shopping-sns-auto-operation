@@ -27,6 +27,10 @@ class Content(TimestampMixin, Base):
     eval_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     regen_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 'api'=Generator AgentがLLM経由で生成 / 'manual'=チャットUIの結果を手動取込
+    generation_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="api", server_default="api"
+    )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
