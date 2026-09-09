@@ -26,7 +26,7 @@ RANKING_ITEM = {
     "mediumImageUrls": [{"imageUrl": "https://image.example/1.jpg"}],
 }
 
-RANKING_PAYLOAD = {"items": [{"item": RANKING_ITEM}]}
+RANKING_PAYLOAD = {"Items": [{"Item": RANKING_ITEM}]}
 
 
 def _fake_response(status_code: int, payload: dict | None = None) -> MagicMock:
@@ -70,7 +70,7 @@ def test_get_ranking_parses_items_and_sends_credentials() -> None:
 def test_search_items_hits_search_endpoint_and_allows_missing_rank() -> None:
     client = _build_client()
     item_without_rank = {k: v for k, v in RANKING_ITEM.items() if k != "rank"}
-    client._client.get.return_value = _fake_response(200, {"items": [{"item": item_without_rank}]})
+    client._client.get.return_value = _fake_response(200, {"Items": [{"Item": item_without_rank}]})
 
     with patch("app.clients.rakuten_api.time.sleep"):
         items = client.search_items(genre_id="100227")

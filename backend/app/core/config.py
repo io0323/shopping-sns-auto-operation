@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     rakuten_app_id: str = ""
     rakuten_affiliate_id: str = ""
+    rakuten_access_key: str = ""
     anthropic_api_key: str = ""
     monthly_llm_budget_jpy: int = 3000
     database_url: str = "sqlite:///./data.db"
