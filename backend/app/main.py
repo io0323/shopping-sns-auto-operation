@@ -19,6 +19,7 @@ from app.api.jobs import router as jobs_router
 from app.api.pipelines import router as pipelines_router
 from app.api.products import router as products_router
 from app.api.prompts import router as prompts_router
+from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.harness.pipeline import create_scheduler
 
@@ -39,7 +40,7 @@ app = FastAPI(title="Shopping SNS Auto Operation", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=get_settings().cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
