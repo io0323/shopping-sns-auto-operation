@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
+/* カード(bg-white)・テーブルを前提にしたライト固定UIのため、OSのダークモード設定に
+   追従させない。追従させると --foreground だけが明色に上書きされ、bg-white の上で
+   色指定のない <td> が白飛びして読めなくなる。 */
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -10,13 +14,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
