@@ -15,6 +15,17 @@ import {
   updateContent,
 } from "@/lib/api";
 import { todayIso } from "@/lib/date";
+import {
+  EMPTY_FORM,
+  type FieldStatus,
+  type ManualContentForm,
+  buildManualContentPayload,
+  fieldStatuses,
+  formFromJson,
+  hasAdDisclosure,
+  isSubmittable,
+  parseHashtags,
+} from "@/lib/manualContent";
 
 const QUALITY_LABELS: Record<string, string> = {
   natural: "自然さ",
@@ -56,10 +67,20 @@ function diffDraft(content: Content, draft: Draft): ContentUpdatePayload {
   return payload;
 }
 
+function CharCount({ status }: { status: FieldStatus }) {
+  return (
+    <span className={`text-xs ${status.ok ? "text-gray-500" : "text-red-600"}`}>
+      {status.label}
+    </span>
+  );
+}
+
 function ManualImportPanel({ onImported }: { onImported: () => void }) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [candidateId, setCandidateId] = useState("");
-  const [text, setText] = useState("");
+  const [form, setForm] = useState<ManualContentForm>(EMPTY_FORM);
+  const [jsonText, setJsonText] = useState("");
+  const [jsonMessage, setJsonMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ManualContentResult | null>(null);
@@ -70,15 +91,42 @@ function ManualImportPanel({ onImported }: { onImported: () => void }) {
       .catch(() => setCandidates([]));
   }, []);
 
+  const status = fieldStatuses(form);
+  const tags = parseHashtags(form.hashtags);
+  const adOk = hasAdDisclosure(form.x_post);
+
+  const updateField = (field: keyof ManualContentForm, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const applyJson = () => {
+    const parsed = formFromJson(jsonText);
+    if (!parsed.ok) {
+      setJsonMessage({ ok: false, text: parsed.error });
+      return;
+    }
+    setForm(parsed.form);
+    setJsonMessage({
+      ok: true,
+      text:
+        parsed.missing.length === 0
+          ? "フォームに反映しました"
+          : `フォームに反映しました(未設定: ${parsed.missing.join(", ")})`,
+    });
+  };
+
   const handleImport = async () => {
-    if (!candidateId || !text.trim()) return;
+    if (!candidateId || !isSubmittable(form)) return;
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      const imported = await createManualContent(candidateId, text);
+      const payload = buildManualContentPayload(form);
+      const imported = await createManualContent(candidateId, JSON.stringify(payload));
       setResult(imported);
-      setText("");
+      setForm(EMPTY_FORM);
+      setJsonText("");
+      setJsonMessage(null);
       onImported();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "取り込みに失敗しました");
@@ -90,11 +138,11 @@ function ManualImportPanel({ onImported }: { onImported: () => void }) {
   return (
     <details className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
       <summary className="cursor-pointer text-sm font-semibold text-gray-700">
-        手動生成結果を貼り付け
+        手動生成結果を入力
       </summary>
       <p className="mt-2 text-xs text-gray-500">
-        候補一覧で「プロンプトをコピー」したものをチャットUIへ貼り、返ってきたJSONをここに貼り付けます。
-        コードフェンス(```)付きのままでも取り込めます。
+        候補一覧で「プロンプトをコピー」したものをチャットUIへ貼り、返ってきた内容を各欄へ入力します。
+        文字数の表示は入力の目安で、禁止表現の判定は保存時にサーバー側で行います。
       </p>
 
       <label className="mt-3 block text-xs text-gray-600" htmlFor="manual-candidate">
@@ -114,23 +162,132 @@ function ManualImportPanel({ onImported }: { onImported: () => void }) {
         ))}
       </select>
 
-      <label className="mt-3 block text-xs text-gray-600" htmlFor="manual-json">
-        生成結果のJSON
-      </label>
-      <textarea
-        id="manual-json"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={8}
-        placeholder={'{"title": "...", "description": "...", "hashtags": [...], "x_post": "...", "cta": "..."}'}
-        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
-      />
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between">
+          <label className="text-xs text-gray-600" htmlFor="manual-title">
+            タイトル
+          </label>
+          <CharCount status={status.title} />
+        </div>
+        <input
+          id="manual-title"
+          value={form.title}
+          onChange={(e) => updateField("title", e.target.value)}
+          placeholder="30文字以内"
+          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        />
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between">
+          <label className="text-xs text-gray-600" htmlFor="manual-description">
+            説明文
+          </label>
+          <CharCount status={status.description} />
+        </div>
+        <textarea
+          id="manual-description"
+          value={form.description}
+          onChange={(e) => updateField("description", e.target.value)}
+          rows={4}
+          placeholder="80〜150文字。利用シーンを1つ具体的に描く"
+          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        />
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between">
+          <label className="text-xs text-gray-600" htmlFor="manual-hashtags">
+            ハッシュタグ
+          </label>
+          <CharCount status={status.hashtags} />
+        </div>
+        <input
+          id="manual-hashtags"
+          value={form.hashtags}
+          onChange={(e) => updateField("hashtags", e.target.value)}
+          placeholder="5〜8個。スペースまたはカンマ区切り。#は省略可"
+          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        />
+        {tags.length > 0 && (
+          <p className="mt-1 text-xs text-gray-500">保存時: {tags.join(" ")}</p>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between">
+          <label className="text-xs text-gray-600" htmlFor="manual-x-post">
+            X投稿文
+          </label>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs ${adOk ? "text-green-700" : "text-red-600"}`}>
+              {adOk ? "#ad あり" : "#ad なし"}
+            </span>
+            <CharCount status={status.x_post} />
+          </div>
+        </div>
+        <textarea
+          id="manual-x-post"
+          value={form.x_post}
+          onChange={(e) => updateField("x_post", e.target.value)}
+          rows={3}
+          placeholder="120文字以内。末尾に #ad を含める"
+          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        />
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between">
+          <label className="text-xs text-gray-600" htmlFor="manual-cta">
+            CTA
+          </label>
+          <CharCount status={status.cta} />
+        </div>
+        <input
+          id="manual-cta"
+          value={form.cta}
+          onChange={(e) => updateField("cta", e.target.value)}
+          placeholder="20文字以内"
+          className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        />
+      </div>
+
+      <details className="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
+        <summary className="cursor-pointer text-xs font-semibold text-gray-600">
+          JSONから一括入力
+        </summary>
+        <p className="mt-2 text-xs text-gray-500">
+          チャットが返したJSONを貼って「フォームに反映」を押すと、上の各欄へ流し込みます。
+          コードフェンス(```)付きのままでも構いません。反映後に手で直せます。
+        </p>
+        <textarea
+          id="manual-json"
+          value={jsonText}
+          onChange={(e) => setJsonText(e.target.value)}
+          rows={6}
+          placeholder={'{"title": "...", "description": "...", "hashtags": [...], "x_post": "...", "cta": "..."}'}
+          className="mt-2 w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
+        />
+        <button
+          type="button"
+          onClick={applyJson}
+          disabled={!jsonText.trim()}
+          className="mt-2 rounded bg-gray-700 px-3 py-1 text-xs text-white hover:bg-gray-600 disabled:opacity-50"
+        >
+          フォームに反映
+        </button>
+        {jsonMessage && (
+          <p className={`mt-2 text-xs ${jsonMessage.ok ? "text-gray-600" : "text-red-600"}`}>
+            {jsonMessage.text}
+          </p>
+        )}
+      </details>
 
       <button
         type="button"
         onClick={handleImport}
-        disabled={busy || !candidateId || !text.trim()}
-        className="mt-3 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-50"
+        disabled={busy || !candidateId || !isSubmittable(form)}
+        className="mt-4 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-50"
       >
         {busy ? "取り込み中..." : "取り込む"}
       </button>
