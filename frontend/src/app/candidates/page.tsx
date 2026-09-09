@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, type Candidate, fetchCandidates } from "@/lib/api";
+import { ApiError, type Candidate, fetchCandidatePrompt, fetchCandidates } from "@/lib/api";
 import { todayIso } from "@/lib/date";
 
 const SCORE_LABELS: Record<string, string> = {
@@ -12,6 +12,44 @@ const SCORE_LABELS: Record<string, string> = {
   price_fit: "価格帯適合",
   competition: "競合度",
 };
+
+function CopyPromptButton({ candidateId }: { candidateId: string }) {
+  const [state, setState] = useState<"idle" | "loading" | "copied" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const handleCopy = async () => {
+    setState("loading");
+    setMessage(null);
+    try {
+      const { prompt, prompt_version } = await fetchCandidatePrompt(candidateId);
+      await navigator.clipboard.writeText(prompt);
+      setState("copied");
+      setMessage(`${prompt_version} をコピーしました`);
+      setTimeout(() => setState("idle"), 2000);
+    } catch (err) {
+      setState("error");
+      setMessage(err instanceof ApiError ? err.message : "コピーに失敗しました");
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={handleCopy}
+        disabled={state === "loading"}
+        className="rounded bg-gray-800 px-2 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+      >
+        {state === "loading" ? "取得中..." : state === "copied" ? "コピー済み" : "プロンプトをコピー"}
+      </button>
+      {message && (
+        <span className={`text-xs ${state === "error" ? "text-red-600" : "text-gray-500"}`}>
+          {message}
+        </span>
+      )}
+    </div>
+  );
+}
 
 function ScoreCell({ candidate }: { candidate: Candidate }) {
   return (
@@ -90,6 +128,7 @@ export default function CandidatesPage() {
                 <th className="px-4 py-2 font-medium">ショップ</th>
                 <th className="px-4 py-2 font-medium">スコア</th>
                 <th className="px-4 py-2 font-medium">状態</th>
+                <th className="px-4 py-2 font-medium">手動生成</th>
               </tr>
             </thead>
             <tbody>
@@ -111,6 +150,9 @@ export default function CandidatesPage() {
                     <ScoreCell candidate={candidate} />
                   </td>
                   <td className="px-4 py-2">{candidate.status}</td>
+                  <td className="px-4 py-2">
+                    <CopyPromptButton candidateId={candidate.id} />
+                  </td>
                 </tr>
               ))}
             </tbody>

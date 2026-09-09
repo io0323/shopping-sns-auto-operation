@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
+  type Candidate,
   type Content,
   type ContentUpdatePayload,
+  type ManualContentResult,
   approveContent,
+  createManualContent,
+  fetchCandidates,
   fetchContents,
   rejectContent,
   updateContent,
 } from "@/lib/api";
+import { todayIso } from "@/lib/date";
 
 const QUALITY_LABELS: Record<string, string> = {
   natural: "自然さ",
@@ -49,6 +54,115 @@ function diffDraft(content: Content, draft: Draft): ContentUpdatePayload {
   if (draft.x_post !== content.x_post) payload.x_post = draft.x_post;
   if (draft.cta !== content.cta) payload.cta = draft.cta;
   return payload;
+}
+
+function ManualImportPanel({ onImported }: { onImported: () => void }) {
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidateId, setCandidateId] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ManualContentResult | null>(null);
+
+  useEffect(() => {
+    fetchCandidates(todayIso())
+      .then((res) => setCandidates(res.items))
+      .catch(() => setCandidates([]));
+  }, []);
+
+  const handleImport = async () => {
+    if (!candidateId || !text.trim()) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const imported = await createManualContent(candidateId, text);
+      setResult(imported);
+      setText("");
+      onImported();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "取り込みに失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <details className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+        手動生成結果を貼り付け
+      </summary>
+      <p className="mt-2 text-xs text-gray-500">
+        候補一覧で「プロンプトをコピー」したものをチャットUIへ貼り、返ってきたJSONをここに貼り付けます。
+        コードフェンス(```)付きのままでも取り込めます。
+      </p>
+
+      <label className="mt-3 block text-xs text-gray-600" htmlFor="manual-candidate">
+        対象の候補
+      </label>
+      <select
+        id="manual-candidate"
+        value={candidateId}
+        onChange={(e) => setCandidateId(e.target.value)}
+        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+      >
+        <option value="">選択してください</option>
+        {candidates.map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {candidate.product_name}
+          </option>
+        ))}
+      </select>
+
+      <label className="mt-3 block text-xs text-gray-600" htmlFor="manual-json">
+        生成結果のJSON
+      </label>
+      <textarea
+        id="manual-json"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={8}
+        placeholder={'{"title": "...", "description": "...", "hashtags": [...], "x_post": "...", "cta": "..."}'}
+        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
+      />
+
+      <button
+        type="button"
+        onClick={handleImport}
+        disabled={busy || !candidateId || !text.trim()}
+        className="mt-3 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-50"
+      >
+        {busy ? "取り込み中..." : "取り込む"}
+      </button>
+
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+      {result && (
+        <div className="mt-3 rounded border border-gray-200 bg-gray-50 p-3 text-xs">
+          <p className="font-semibold text-gray-700">
+            取り込みました(status: {result.status} / {result.prompt_version} / 手動生成)
+          </p>
+          {result.rule_violations.length === 0 ? (
+            <p className="mt-1 text-green-700">ルールベースチェック: 違反なし</p>
+          ) : (
+            <div className="mt-1">
+              <p className="text-red-600">
+                ルールベースチェック: {result.rule_violations.length}件の違反
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-red-600">
+                {result.rule_violations.map((violation) => (
+                  <li key={violation}>{violation}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="mt-1 text-gray-500">
+            LLM評価は行っていないため、下の一覧で内容を確認してから承認してください。
+          </p>
+        </div>
+      )}
+    </details>
+  );
 }
 
 export default function ReviewPage() {
@@ -125,6 +239,7 @@ export default function ReviewPage() {
   return (
     <main className="mx-auto max-w-4xl p-6">
       <h1 className="mb-4 text-xl font-bold">レビュー</h1>
+      <ManualImportPanel onImported={load} />
       {loading && <p className="text-sm text-gray-500">読み込み中...</p>}
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {!loading && contents.length === 0 && (
@@ -141,15 +256,22 @@ export default function ReviewPage() {
                 <span className="text-sm font-medium text-gray-700">
                   {content.product_name}
                 </span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs ${
-                    content.status === "needs_review"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-green-100 text-green-700"
-                  }`}
-                >
-                  {content.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  {content.generation_source === "manual" && (
+                    <span className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                      手動生成
+                    </span>
+                  )}
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs ${
+                      content.status === "needs_review"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-green-100 text-green-700"
+                    }`}
+                  >
+                    {content.status}
+                  </span>
+                </div>
               </div>
 
               {content.quality_score !== null && (

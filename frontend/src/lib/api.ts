@@ -41,6 +41,7 @@ export interface Content {
   eval_comment: string | null;
   regen_count: number;
   prompt_version: string;
+  generation_source: string;
   status: string;
   scheduled_at: string | null;
   posted_at: string | null;
@@ -276,5 +277,37 @@ export function activatePrompt(
   return request<PromptVersion>(`/api/v1/prompts/${agent}/activate`, {
     method: "POST",
     body: JSON.stringify({ prompt_version_id: promptVersionId }),
+  });
+}
+
+export interface CandidatePrompt {
+  candidate_id: string;
+  product_id: string;
+  product_name: string;
+  prompt_version: string;
+  prompt: string;
+}
+
+export interface ManualContentResult {
+  content_id: string;
+  candidate_id: string;
+  status: string;
+  generation_source: string;
+  prompt_version: string;
+  rule_violations: string[];
+}
+
+export function fetchCandidatePrompt(candidateId: string): Promise<CandidatePrompt> {
+  return request<CandidatePrompt>(`/api/v1/candidates/${candidateId}/prompt`);
+}
+
+export function createManualContent(
+  candidateId: string,
+  content: string,
+  promptVersion?: string,
+): Promise<ManualContentResult> {
+  return request<ManualContentResult>(`/api/v1/candidates/${candidateId}/manual-content`, {
+    method: "POST",
+    body: JSON.stringify({ content, prompt_version: promptVersion ?? null }),
   });
 }
