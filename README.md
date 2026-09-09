@@ -16,6 +16,22 @@
 2. `docs/` ディレクトリを作り、01〜03の設計書をコピー
 3. `04_ClaudeCodeプロンプト.md` の Phase 0 から順にClaude Codeで実行
 4. `.env` に楽天アプリID・アフィリエイトID・Anthropic APIキー・月額予算を設定
+   (フロントを3000以外で起動する場合は `CORS_ORIGINS` にそのオリジンを追記する)
+5. DBを初期化し、初期プロンプトを投入
+
+   ```
+   cd backend && uv run alembic upgrade head
+   cd backend && uv run python scripts/seed_prompts.py
+   ```
+
+6. 画面の動作確認用にデモデータを投入(任意。`.env` 未設定でも実行できる)
+
+   ```
+   cd backend && uv run python scripts/seed_demo_data.py
+   ```
+
+   既存データがある場合は誤投入を防ぐため中断する。入れ直す場合は `--force` を付ける
+   (`demo:` 始まりのデモ行だけを削除して入れ直すため、パイプラインが作った実データは残る)。
 
 ## 名称について
 
