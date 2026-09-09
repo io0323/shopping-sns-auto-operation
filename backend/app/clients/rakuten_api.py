@@ -47,13 +47,13 @@ class RakutenItem(BaseModel):
 class _RakutenItemWrapper(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    item: RakutenItem = Field(alias="item")
+    item: RakutenItem = Field(alias="Item")
 
 
 class _RakutenApiResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    items: list[_RakutenItemWrapper] = Field(default_factory=list, alias="items")
+    items: list[_RakutenItemWrapper] = Field(default_factory=list, alias="Items")
 
 
 class RakutenApiClient:
@@ -61,11 +61,13 @@ class RakutenApiClient:
         self,
         application_id: str | None = None,
         affiliate_id: str | None = None,
+        access_key: str | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         settings = get_settings()
         self._application_id = application_id or settings.rakuten_app_id
         self._affiliate_id = affiliate_id or settings.rakuten_affiliate_id
+        self._access_key = access_key or settings.rakuten_access_key
         self._client = client or httpx.Client(timeout=10.0)
         self._last_request_at: float | None = None
 
@@ -93,8 +95,11 @@ class RakutenApiClient:
     def _request_with_retry(self, url: str, params: dict[str, Any]) -> httpx.Response:
         self._respect_rate_limit()
         attempt = 0
+        # accessKeyはクエリ文字列ではなくヘッダで送る(URLはログ・例外メッセージに
+        # 載りうるため、秘匿値をクエリに置かない)。
+        headers = {"accessKey": self._access_key} if self._access_key else None
         while True:
-            response = self._client.get(url, params=params)
+            response = self._client.get(url, params=params, headers=headers)
             self._last_request_at = time.monotonic()
             if response.status_code == 200:
                 return response
