@@ -49,6 +49,7 @@ def _to_content_out(content: Content, product_name: str) -> ContentOut:
         eval_comment=content.eval_comment,
         regen_count=content.regen_count,
         prompt_version=content.prompt_version,
+        generation_source=content.generation_source,
         status=content.status,
         scheduled_at=content.scheduled_at,
         posted_at=content.posted_at,

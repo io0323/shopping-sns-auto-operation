@@ -89,6 +89,22 @@ def render_prompt(template: str, product: Product, improvement_hint: str | None)
     return prompt
 
 
+def build_generator_prompt(
+    session: Session,
+    product: Product,
+    improvement_hint: str | None = None,
+) -> tuple[str, str]:
+    """LLMへ送るプロンプト本文と、その prompt_version を返す。
+
+    Generator Agent(`generate_content`)と、プロンプト書き出しAPI
+    (`GET /candidates/{id}/prompt`)の両方がこの関数を使う。手動生成用に
+    書き出したプロンプトと、Agentが実際に送るプロンプトを常に一致させるため、
+    構築ロジックをここ以外に置かないこと。
+    """
+    prompt_version = load_active_prompt(session, "generator")
+    return render_prompt(prompt_version.body, product, improvement_hint), prompt_version.version
+
+
 def generate_content(
     session: Session,
     llm_client: LlmClient,
@@ -96,8 +112,7 @@ def generate_content(
     product: Product,
     improvement_hint: str | None = None,
 ) -> tuple[GeneratedContent, str]:
-    prompt_version = load_active_prompt(session, "generator")
-    prompt = render_prompt(prompt_version.body, product, improvement_hint)
+    prompt, prompt_version_str = build_generator_prompt(session, product, improvement_hint)
 
     settings = get_settings()
     result = llm_client.complete(
@@ -110,4 +125,4 @@ def generate_content(
     violations = validate_length_constraints(generated)
     if violations:
         raise ValueError("生成コンテンツが制約に違反しています: " + "; ".join(violations))
-    return generated, prompt_version.version
+    return generated, prompt_version_str

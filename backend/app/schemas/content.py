@@ -21,6 +21,7 @@ class ContentOut(BaseModel):
     eval_comment: str | None
     regen_count: int
     prompt_version: str
+    generation_source: str
     status: str
     scheduled_at: datetime | None
     posted_at: datetime | None
