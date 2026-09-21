@@ -1,5 +1,7 @@
+import shutil
 from collections.abc import Generator
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -8,9 +10,70 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.clients.elf as elf_module
 import app.core.db as db_module
 from app.main import app
 from app.models import Base, Candidate, Content, Job, LlmUsage, Product, PromptVersion, Result
+
+
+def _elf_config_lines(db: Path) -> list[str]:
+    lines = ["system: harness", "paths:", f"  db: {db}"]
+    try:
+        from llmops.config import project_root
+    except ImportError:
+        return lines
+    elf_root = project_root()
+    return lines + [
+        f"  prompts_dir: {elf_root / 'prompts'}",
+        f"  models_file: {elf_root / 'models.yaml'}",
+    ]
+
+
+@pytest.fixture(scope="session")
+def elf_template_db(tmp_path_factory: pytest.TempPathFactory) -> Path | None:
+    """Prompt / 論理モデルを sync 済みの ELF DB(セッションで1回だけ作る)。"""
+    try:
+        from llmops.sdk import LLMOps
+    except ImportError:
+        return None
+    root = tmp_path_factory.mktemp("elf-template")
+    db = root / "elf.sqlite3"
+    (root / "config.yaml").write_text(
+        "\n".join(_elf_config_lines(db)) + "\n", encoding="utf-8"
+    )
+    ops = LLMOps.load(root / "config.yaml", system="harness")
+    ops.runtime.prompts.sync()
+    ops.runtime.models.sync()
+    ops.close()
+    return db
+
+
+@pytest.fixture(autouse=True)
+def isolated_elf(
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    elf_template_db: Path | None,
+) -> Generator[None, None, None]:
+    """ELF(llmops)の記録先をテストごとの一時DBにする。本番の ELF DB を汚さない。
+
+    Prompt と論理モデルは ELF リポジトリの実物(prompts/ と models.yaml)を読む。
+    Harness の Prompt が ELF 登録版とバイト一致していることも、ここで一緒に検証される。
+    llmops が未インストールの環境(CI)では ELF は使われないので、設定するだけで無害。
+    """
+    root = tmp_path_factory.mktemp("elf")
+    db = root / "elf.sqlite3"
+    if elf_template_db is not None:
+        shutil.copyfile(elf_template_db, db)
+    (root / "config.yaml").write_text("\n".join(_elf_config_lines(db)) + "\n", encoding="utf-8")
+    monkeypatch.setenv("ELF_CONFIG", str(root / "config.yaml"))
+    # LlmClient が実モデル名を書き込む環境変数。テスト後に元へ戻す
+    for name in ("MODEL_GENERATOR", "MODEL_EVALUATOR", "MODEL_LEARNING"):
+        monkeypatch.setenv(name, "")
+
+    elf_module.reset_llmops()
+    yield
+    # 他スレッド(BackgroundTasks)が作ったハンドルは、そのスレッドの終了とともに捨てられる
+    elf_module.reset_llmops()
 
 
 @pytest.fixture

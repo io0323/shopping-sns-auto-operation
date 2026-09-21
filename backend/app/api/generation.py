@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clients import elf
 from app.clients.llm import LlmClient
 from app.core.db import get_db, get_session_factory
 from app.harness.generation import generate_and_evaluate_candidates
@@ -30,8 +31,9 @@ def _run_generate_job(job_id: uuid.UUID, candidate_ids: list[uuid.UUID]) -> None
         try:
             stmt = select(Candidate).where(Candidate.id.in_(candidate_ids))
             candidates = list(session.execute(stmt).scalars().all())
-            llm_client = LlmClient(session)
-            result = generate_and_evaluate_candidates(session, llm_client, job.id, candidates)
+            with elf.trace("generation.manual", external_id=str(job.id)):
+                llm_client = LlmClient(session)
+                result = generate_and_evaluate_candidates(session, llm_client, job.id, candidates)
             job.status = "done"
             payload = dict(job.payload or {})
             payload["result"] = result

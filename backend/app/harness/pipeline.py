@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.agents.learning import MIN_DATASET_SIZE, run_learning
 from app.agents.research import StrategyConfig, run_daily_research
 from app.agents.selection import ScoringWeights, SeasonalityConfig, run_daily_selection
+from app.clients import elf
 from app.clients.llm import LlmClient
 from app.clients.rakuten_api import RakutenApiClient
 from app.core.config import get_settings
@@ -46,7 +47,8 @@ def _run_step(
 
     job = start_step(session, pipeline, step, run_date)
     try:
-        result = action(job)
+        with elf.step(step):
+            result = action(job)
     except Exception as exc:
         logger.exception("pipeline step failed: step=%s", step)
         finish_step(session, job, status="failed", error=str(exc))
@@ -104,6 +106,24 @@ def run_daily_pipeline(
         )
 
     run_date = run_date or date.today()
+    # パイプライン1回を ELF の1 trace として観測する(状態管理は job_queue のまま)
+    with elf.trace(
+        f"pipeline.{PIPELINE_NAME}", external_id=f"{PIPELINE_NAME}:{run_date.isoformat()}"
+    ):
+        return _run_daily_pipeline(
+            session, run_date, rakuten_client, llm_client, strategy, weights, seasonality
+        )
+
+
+def _run_daily_pipeline(
+    session: Session,
+    run_date: date,
+    rakuten_client: RakutenApiClient | None,
+    llm_client: LlmClient | None,
+    strategy: StrategyConfig | None,
+    weights: ScoringWeights | None,
+    seasonality: SeasonalityConfig | None,
+) -> dict[str, Any]:
     rakuten_client = rakuten_client or RakutenApiClient()
     llm_client = llm_client or LlmClient(session)
 
@@ -194,6 +214,16 @@ def run_weekly_pipeline(
         )
 
     run_date = run_date or date.today()
+    with elf.trace(
+        f"pipeline.{WEEKLY_PIPELINE_NAME}",
+        external_id=f"{WEEKLY_PIPELINE_NAME}:{run_date.isoformat()}",
+    ):
+        return _run_weekly_pipeline(session, run_date, llm_client)
+
+
+def _run_weekly_pipeline(
+    session: Session, run_date: date, llm_client: LlmClient | None
+) -> dict[str, Any]:
     llm_client = llm_client or LlmClient(session)
 
     learning_result = _run_step(

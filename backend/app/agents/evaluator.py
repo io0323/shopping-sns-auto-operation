@@ -14,7 +14,7 @@ from app.agents.generator import (
     strip_code_fence,
     validate_length_constraints,
 )
-from app.clients.llm import LlmClient
+from app.clients.llm import LlmClient, RegisteredPrompt
 from app.core.config import get_settings
 from app.models import Candidate, Content, Product
 
@@ -70,11 +70,18 @@ def rule_check(content: GeneratedContent, ng_words: NgWordsConfig) -> list[str]:
     return violations
 
 
+def eval_variables(content: GeneratedContent, recent_posts: list[str]) -> dict[str, str]:
+    """Evaluator Prompt の変数(ELF の harness.evaluator と同じ組み立て)。"""
+    return {
+        "content_json": json.dumps(content.model_dump(), ensure_ascii=False),
+        "recent_posts": "\n".join(recent_posts) if recent_posts else "(過去投稿なし)",
+    }
+
+
 def render_eval_prompt(template: str, content: GeneratedContent, recent_posts: list[str]) -> str:
-    content_json = json.dumps(content.model_dump(), ensure_ascii=False)
-    recent_posts_text = "\n".join(recent_posts) if recent_posts else "(過去投稿なし)"
-    prompt = template.replace("{content_json}", content_json)
-    prompt = prompt.replace("{recent_posts}", recent_posts_text)
+    variables = eval_variables(content, recent_posts)
+    prompt = template.replace("{content_json}", variables["content_json"])
+    prompt = prompt.replace("{recent_posts}", variables["recent_posts"])
     return prompt
 
 
@@ -92,7 +99,11 @@ def run_evaluator(
     recent_posts: list[str],
 ) -> EvalResult:
     prompt_version = load_active_prompt(session, "evaluator")
-    prompt = render_eval_prompt(prompt_version.body, content, recent_posts)
+    prompt = RegisteredPrompt(
+        render_eval_prompt(prompt_version.body, content, recent_posts),
+        prompt_id="harness.evaluator",
+        variables=eval_variables(content, recent_posts),
+    )
 
     settings = get_settings()
     result = llm_client.complete(
