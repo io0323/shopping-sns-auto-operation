@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.generator import load_active_prompt, strip_code_fence
-from app.clients.llm import LlmClient
+from app.clients.llm import LlmClient, RegisteredPrompt
 from app.core.config import get_settings
 from app.harness.cost_guard import BudgetExceededError, check_budget
 from app.models import Candidate, Content, Product, PromptVersion, Result
@@ -147,6 +147,21 @@ def summarize_group(group: list[LearningDataPoint]) -> dict[str, Any]:
     }
 
 
+def learning_variables(
+    current_generator_prompt: str,
+    data_point_count: int,
+    high_summary: dict[str, Any],
+    low_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Learning Prompt の変数(ELF の harness.learning と同じ組み立て)。"""
+    return {
+        "data_point_count": data_point_count,
+        "high_group_json": json.dumps(high_summary, ensure_ascii=False),
+        "low_group_json": json.dumps(low_summary, ensure_ascii=False),
+        "current_generator_prompt": current_generator_prompt,
+    }
+
+
 def render_learning_prompt(
     template: str,
     current_generator_prompt: str,
@@ -154,10 +169,13 @@ def render_learning_prompt(
     high_summary: dict[str, Any],
     low_summary: dict[str, Any],
 ) -> str:
-    prompt = template.replace("{data_point_count}", str(data_point_count))
-    prompt = prompt.replace("{high_group_json}", json.dumps(high_summary, ensure_ascii=False))
-    prompt = prompt.replace("{low_group_json}", json.dumps(low_summary, ensure_ascii=False))
-    prompt = prompt.replace("{current_generator_prompt}", current_generator_prompt)
+    variables = learning_variables(
+        current_generator_prompt, data_point_count, high_summary, low_summary
+    )
+    prompt = template.replace("{data_point_count}", str(variables["data_point_count"]))
+    prompt = prompt.replace("{high_group_json}", variables["high_group_json"])
+    prompt = prompt.replace("{low_group_json}", variables["low_group_json"])
+    prompt = prompt.replace("{current_generator_prompt}", variables["current_generator_prompt"])
     return prompt
 
 
@@ -205,12 +223,18 @@ def run_learning(session: Session, llm_client: LlmClient, job_id: uuid.UUID) -> 
 
     learning_prompt_version = load_active_prompt(session, "learning")
     generator_prompt_version = load_active_prompt(session, "generator")
-    prompt = render_learning_prompt(
-        learning_prompt_version.body,
-        generator_prompt_version.body,
-        len(dataset),
-        high_summary,
-        low_summary,
+    prompt = RegisteredPrompt(
+        render_learning_prompt(
+            learning_prompt_version.body,
+            generator_prompt_version.body,
+            len(dataset),
+            high_summary,
+            low_summary,
+        ),
+        prompt_id="harness.learning",
+        variables=learning_variables(
+            generator_prompt_version.body, len(dataset), high_summary, low_summary
+        ),
     )
 
     settings = get_settings()

@@ -3,10 +3,12 @@ from datetime import date
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import PromptVersion
+from scripts.seed_prompts import SEED_PROMPTS
 from tests.conftest import make_candidate, make_product
 
 
@@ -62,21 +64,22 @@ class _FakeAnthropicClient:
 def test_generate_returns_202_and_job_id_then_pollable(
     api_client: TestClient, db_session_factory: sessionmaker[Session], monkeypatch
 ) -> None:
+    # LLM 呼び出しは ELF 経由。llmops が無い環境(CI)では実行できない
+    pytest.importorskip("llmops")
     session = db_session_factory()
     product = make_product(session)
     candidate = make_candidate(session, product, selected_date=date(2026, 7, 22))
     candidate_id = candidate.id
+    # ELF に登録された版と一致する本文でなければ、LLM を呼ぶ前に止まる。
+    # そのため seed_prompts.py と同じ実物の本文を使う
     session.add_all(
         [
             PromptVersion(
-                agent="generator", version="gen-v1", body="{product_json}", is_active=True
-            ),
-            PromptVersion(
-                agent="evaluator",
-                version="eval-v1",
-                body="{content_json} {recent_posts}",
+                agent=agent, version=version, body=path.read_text(encoding="utf-8"),
                 is_active=True,
-            ),
+            )
+            for agent, version, path in SEED_PROMPTS
+            if agent in {"generator", "evaluator"}
         ]
     )
     session.commit()
