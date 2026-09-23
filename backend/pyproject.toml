@@ -57,5 +57,10 @@ strict = true
 module = "apscheduler.*"
 ignore_missing_imports = true
 
+# ELF(enterprise-llmops-framework)は別リポジトリで、CI には入らない(app/clients/elf.py)
+[[tool.mypy.overrides]]
+module = "llmops.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

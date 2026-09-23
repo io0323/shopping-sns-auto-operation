@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.clients.llm import LlmClient
+from app.clients.llm import LlmClient, RegisteredPrompt
 from app.core.config import get_settings
 from app.models import Product, PromptVersion
 
@@ -74,7 +74,8 @@ def load_active_prompt(session: Session, agent: str) -> PromptVersion:
     return prompt
 
 
-def render_prompt(template: str, product: Product, improvement_hint: str | None) -> str:
+def generator_variables(product: Product, improvement_hint: str | None) -> dict[str, str]:
+    """Generator Prompt の変数(ELF の harness.generator と同じ組み立て)。"""
     product_json = json.dumps(
         {
             "name": product.name,
@@ -83,10 +84,18 @@ def render_prompt(template: str, product: Product, improvement_hint: str | None)
         },
         ensure_ascii=False,
     )
-    prompt = template.replace("{product_json}", product_json)
+    improvement = ""
     if improvement_hint:
-        prompt += f"\n\n# 改善指示\n{improvement_hint}\n上記の指示を反映して再生成してください。"
-    return prompt
+        improvement = (
+            f"\n\n# 改善指示\n{improvement_hint}\n上記の指示を反映して再生成してください。"
+        )
+    return {"product_json": product_json, "improvement": improvement}
+
+
+def render_prompt(template: str, product: Product, improvement_hint: str | None) -> str:
+    variables = generator_variables(product, improvement_hint)
+    prompt = template.replace("{product_json}", variables["product_json"])
+    return prompt + variables["improvement"]
 
 
 def build_generator_prompt(
@@ -102,7 +111,12 @@ def build_generator_prompt(
     構築ロジックをここ以外に置かないこと。
     """
     prompt_version = load_active_prompt(session, "generator")
-    return render_prompt(prompt_version.body, product, improvement_hint), prompt_version.version
+    prompt = RegisteredPrompt(
+        render_prompt(prompt_version.body, product, improvement_hint),
+        prompt_id="harness.generator",
+        variables=generator_variables(product, improvement_hint),
+    )
+    return prompt, prompt_version.version
 
 
 def generate_content(
